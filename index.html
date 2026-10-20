@@ -4,13 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PhysioEdu - Sistema de Fisioterapia Universitária</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230d9488'/%3E%3Cpath d='M14 8h4v6h6v4h-6v6h-4v-6H8v-4h6z' fill='white'/%3E%3C/svg%3E">
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts: Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- FontAwesome for Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-   
+
     <script>
         tailwind.config = {
             theme: {
@@ -43,27 +44,14 @@
             font-family: 'Inter', sans-serif;
             background-color: #f8fafc;
             color: #1e293b;
+        }
+        body.has-bottom-nav {
             padding-bottom: 70px; /* Espaço para o bottom nav no mobile */
         }
         @media (min-width: 768px) {
-            body {
+            body.has-bottom-nav {
                 padding-bottom: 0px;
             }
-        }
-        /* Custom scrollbars */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #f1f5f9;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
         }
         .toast-animate {
             animation: slideInRight 0.3s ease-out forwards;
@@ -72,7 +60,8 @@
             from { transform: translateX(100%); opacity: 0; }
             to { transform: translateX(0); opacity: 1; }
         }
-
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { scrollbar-width: none; }
 
         /* Mobile Bottom Sheet Animations */
         .bottom-sheet-overlay {
@@ -81,30 +70,31 @@
         .bottom-sheet-content {
             transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
         }
-    </style>
-</head>
-<body class="bg-slate-50 min-h-screen flex flex-col justify-between antialiased selection:bg-brand-500 selection:text-white pb-20 md:pb-0">
-
+        .field-invalid {
+            border-color: #f43f5e !important;
+            box-shadow: 0 0 0 2px rgba(244, 63, 94, 0.2);
+        }
     </style>
 </head>
 <body class="bg-slate-50 min-h-screen flex flex-col justify-between antialiased selection:bg-brand-500 selection:text-white">
 
-
-    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+    <div id="toast-container" class="fixed top-4 right-4 left-4 sm:left-auto z-[70] flex flex-col gap-2 sm:max-w-sm sm:w-full pointer-events-none" aria-live="polite"></div>
 
 
     <header id="main-header" class="bg-white border-b border-slate-200 sticky top-0 z-30 hidden shadow-sm">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
             <div class="flex items-center space-x-3 cursor-pointer" onclick="navigateHome()">
                 <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-teal-400 flex items-center justify-center text-white font-bold text-xl shadow-md">
                     <i class="fa-solid fa-notes-medical"></i>
                 </div>
                 <div>
                     <span class="text-xl font-bold bg-gradient-to-r from-brand-700 to-brand-500 bg-clip-text text-transparent">PhysioEdu</span>
-                    <span id="header-subtitle" class="block text-xs text-slate-500 font-medium hidden sm:block">Clínica Universitária</span>
+                    <span id="header-subtitle" class="text-xs text-slate-500 font-medium hidden sm:block">Clínica Universitária</span>
                 </div>
             </div>
 
+            <!-- Navegação desktop -->
+            <nav id="desktop-nav" class="hidden md:flex items-center gap-1 flex-1 justify-center"></nav>
 
             <!-- Profile Badge & Logout -->
             <div class="flex items-center gap-2 sm:gap-3">
@@ -113,7 +103,7 @@
                     <span id="user-display-name" class="truncate max-w-[110px] sm:max-w-none">Carregando...</span>
                     <span id="user-display-role" class="hidden sm:inline-block ml-1 bg-brand-100 text-brand-800 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase">Aluno</span>
                 </div>
-                <button onclick="handleLogout()" class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Sair do Sistema">
+                <button onclick="handleLogout()" class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Sair do Sistema" aria-label="Sair do Sistema">
                     <i class="fa-solid fa-right-from-bracket text-lg"></i>
                 </button>
             </div>
@@ -123,9 +113,15 @@
 
     <main class="flex-grow max-w-7xl w-full mx-auto p-3 sm:p-6 lg:p-8">
 
+        <!-- ================= CARREGANDO ================= -->
+        <section id="screen-loading" class="min-h-[70vh] flex flex-col items-center justify-center gap-3 text-slate-400">
+            <i class="fa-solid fa-circle-notch fa-spin text-3xl text-brand-600"></i>
+            <p class="text-sm">Carregando PhysioEdu...</p>
+        </section>
+
 
         <!-- ================= TELA 1: LOGIN ================= -->
-        <section id="screen-login" class="min-h-[80vh] flex items-center justify-center py-6">
+        <section id="screen-login" class="hidden min-h-[80vh] flex items-center justify-center py-6">
             <div class="w-full max-w-md bg-white p-6 sm:p-8 rounded-2xl shadow-xl border border-slate-100 mx-2">
                 <div class="text-center mb-6 sm:mb-8">
                     <div class="w-16 h-16 bg-brand-50 text-brand-600 rounded-2xl flex items-center justify-center mx-auto mb-3 text-3xl shadow-inner">
@@ -137,7 +133,7 @@
 
 
                 <!-- Toggle Perfil -->
-                <div class="mb-6 bg-slate-100 p-1 rounded-xl flex gap-1 border border-slate-200">
+                <div class="mb-6 bg-slate-100 p-1 rounded-xl flex gap-1 border border-slate-200" role="tablist" aria-label="Perfil de acesso">
                     <button type="button" id="role-student-btn" onclick="selectRole('student')" class="flex-1 py-2 px-3 text-sm font-semibold rounded-lg bg-white text-slate-800 shadow-sm transition-all flex items-center justify-center gap-2">
                         <i class="fa-solid fa-user-graduate"></i> Estudante
                     </button>
@@ -147,43 +143,68 @@
                 </div>
 
 
-                <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
+                <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4" novalidate>
+                    <div id="login-error" class="hidden p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium flex items-start gap-2" role="alert"></div>
+
                     <div>
-                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1" id="login-id-label">Matrícula do Aluno</label>
+                        <label for="login-id" class="block text-xs font-semibold text-slate-600 uppercase mb-1" id="login-id-label">Matrícula do Aluno</label>
                         <div class="relative">
                             <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                                 <i class="fa-solid fa-id-card"></i>
                             </span>
-                            <input type="text" id="login-id" required value="202301982" placeholder="Ex: 202301982" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition">
+                            <input type="text" id="login-id" autocomplete="username" placeholder="Ex: 202301982" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition">
                         </div>
                     </div>
 
 
                     <div>
-                        <label class="block text-xs font-semibold text-slate-600 uppercase mb-1">Senha de Acesso</label>
+                        <label for="login-password" class="block text-xs font-semibold text-slate-600 uppercase mb-1">Senha de Acesso</label>
                         <div class="relative">
                             <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                                 <i class="fa-solid fa-lock"></i>
                             </span>
-                            <input type="password" id="login-password" required value="123456" placeholder="••••••••" class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition">
+                            <input type="password" id="login-password" autocomplete="current-password" placeholder="••••••••" class="w-full pl-10 pr-11 py-3 bg-slate-50 border border-slate-300 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition">
+                            <button type="button" onclick="togglePassword('login-password', this)" class="absolute inset-y-0 right-0 px-3 text-slate-400 hover:text-slate-600" aria-label="Mostrar senha">
+                                <i class="fa-regular fa-eye"></i>
+                            </button>
                         </div>
                     </div>
 
 
-                    <div class="flex items-center justify-between text-xs text-slate-500 py-1">
+                    <div class="flex items-center justify-between text-xs text-slate-500 py-1 gap-2">
                         <label class="flex items-center cursor-pointer">
-                            <input type="checkbox" checked class="rounded border-slate-300 text-brand-600 focus:ring-brand-500 mr-2 w-4 h-4">
-                            Lembrar credenciais
+                            <input type="checkbox" id="login-remember" checked class="rounded border-slate-300 text-brand-600 focus:ring-brand-500 mr-2 w-4 h-4">
+                            Lembrar matrícula e manter conectado
                         </label>
-                        <a href="#" class="text-brand-600 hover:underline">Esqueceu a senha?</a>
+                        <button type="button" onclick="openResetModal()" class="text-brand-600 hover:underline shrink-0">Esqueceu a senha?</button>
                     </div>
 
 
-                    <button type="submit" class="w-full py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl shadow-lg shadow-brand-500/20 transition-all flex items-center justify-center gap-2 text-base active:scale-[0.98]">
+                    <button type="submit" id="login-submit" class="w-full py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl shadow-lg shadow-brand-500/20 transition-all flex items-center justify-center gap-2 text-base active:scale-[0.98] disabled:opacity-60 disabled:cursor-wait">
                         <span>Acessar Painel</span>
                         <i class="fa-solid fa-arrow-right"></i>
                     </button>
                 </form>
+
+                <p class="text-center text-xs text-slate-500 mt-4">
+                    Ainda não tem acesso?
+                    <button type="button" onclick="openRegisterModal()" class="text-brand-600 font-semibold hover:underline">Criar conta</button>
+                </p>
+
+                <!-- Acesso de demonstração -->
+                <div class="mt-5 p-3 rounded-xl bg-slate-50 border border-dashed border-slate-300 text-xs text-slate-600 space-y-2">
+                    <p class="font-semibold text-slate-700"><i class="fa-solid fa-circle-info text-brand-600 mr-1"></i> Contas de demonstração (senha <code class="bg-white px-1 rounded border border-slate-200">123456</code>)</p>
+                    <div class="flex flex-col sm:flex-row gap-2">
+                        <button type="button" onclick="fillDemo('student')" class="flex-1 px-3 py-2 bg-white border border-slate-200 hover:border-brand-500 rounded-lg text-left transition">
+                            <span class="block font-semibold text-slate-700"><i class="fa-solid fa-user-graduate mr-1 text-brand-600"></i> Estudante</span>
+                            <span class="text-slate-500">202301982</span>
+                        </button>
+                        <button type="button" onclick="fillDemo('teacher')" class="flex-1 px-3 py-2 bg-white border border-slate-200 hover:border-brand-500 rounded-lg text-left transition">
+                            <span class="block font-semibold text-slate-700"><i class="fa-solid fa-user-tie mr-1 text-brand-600"></i> Professor</span>
+                            <span class="text-slate-500">DOC-88392</span>
+                        </button>
+                    </div>
+                </div>
 
 
                 <div class="mt-6 pt-4 border-t border-slate-100 text-center">
@@ -198,13 +219,27 @@
         <!-- ================= TELA 2: AGENDA DO ALUNO ================= -->
         <section id="screen-agenda" class="hidden space-y-4 sm:space-y-6">
             <!-- Header Agenda -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200/80 shadow-sm">
+            <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200/80 shadow-sm">
                 <div>
                     <h2 class="text-xl sm:text-2xl font-bold text-slate-800">Agenda de Atendimentos</h2>
-                    <p class="text-xs sm:text-sm text-slate-500 mt-0.5" id="current-date-display">Sessões agendadas para Hoje</p>
+                    <p class="text-xs sm:text-sm text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                        <span id="current-date-display">Sessões agendadas para Hoje</span>
+                        <span id="agenda-relative-badge" class="hidden px-2 py-0.5 rounded-full bg-brand-100 text-brand-800 text-[10px] font-semibold uppercase">Hoje</span>
+                    </p>
                 </div>
-                <div class="flex items-center gap-2">
-                    <button onclick="openModal('modal-anamnese')" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition active:scale-[0.98]">
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <!-- Navegação de datas -->
+                    <div class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-xl p-1">
+                        <button onclick="changeAgendaDate(-1)" class="p-2 text-slate-500 hover:text-slate-800 hover:bg-white rounded-lg transition" title="Dia anterior" aria-label="Dia anterior">
+                            <i class="fa-solid fa-chevron-left"></i>
+                        </button>
+                        <input type="date" id="agenda-date" onchange="setAgendaDate(this.value)" class="flex-1 sm:flex-initial bg-transparent text-xs sm:text-sm font-semibold text-slate-700 px-2 py-1.5 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500" aria-label="Escolher data">
+                        <button onclick="changeAgendaDate(1)" class="p-2 text-slate-500 hover:text-slate-800 hover:bg-white rounded-lg transition" title="Próximo dia" aria-label="Próximo dia">
+                            <i class="fa-solid fa-chevron-right"></i>
+                        </button>
+                        <button onclick="setAgendaDate(todayISO())" class="px-3 py-1.5 text-xs font-semibold text-brand-700 hover:bg-white rounded-lg transition">Hoje</button>
+                    </div>
+                    <button onclick="openAnamneseModal()" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition active:scale-[0.98]">
                         <i class="fa-solid fa-user-plus text-sm"></i>
                         <span>Novo Cadastramento (Anamnese)</span>
                     </button>
@@ -212,33 +247,37 @@
             </div>
 
 
-            <!-- Stats Bar (Mobile Grid Optimized) -->
+            <!-- Alerta de correções solicitadas pelo professor -->
+            <div id="corrections-panel" class="hidden bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-5 shadow-sm"></div>
+
+
+            <!-- Stats Bar (clicável para filtrar) -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-4">
-                <div class="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm">
+                <button type="button" data-filter="all" onclick="setAgendaFilter('all')" class="agenda-stat text-left bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm transition hover:border-slate-300">
                     <span class="text-[10px] sm:text-xs font-semibold text-slate-400 uppercase tracking-wider">Total</span>
                     <div class="text-xl sm:text-2xl font-bold text-slate-800 mt-0.5" id="stat-total">0</div>
-                </div>
-                <div class="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm">
+                </button>
+                <button type="button" data-filter="pending" onclick="setAgendaFilter('pending')" class="agenda-stat text-left bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm transition hover:border-amber-300">
                     <span class="text-[10px] sm:text-xs font-semibold text-amber-500 uppercase tracking-wider">Aguardando</span>
                     <div class="text-xl sm:text-2xl font-bold text-amber-600 mt-0.5" id="stat-pending">0</div>
-                </div>
-                <div class="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm">
+                </button>
+                <button type="button" data-filter="completed" onclick="setAgendaFilter('completed')" class="agenda-stat text-left bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm transition hover:border-emerald-300">
                     <span class="text-[10px] sm:text-xs font-semibold text-emerald-500 uppercase tracking-wider">Atendidos</span>
                     <div class="text-xl sm:text-2xl font-bold text-emerald-600 mt-0.5" id="stat-completed">0</div>
-                </div>
-                <div class="bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm">
+                </button>
+                <button type="button" data-filter="absent" onclick="setAgendaFilter('absent')" class="agenda-stat text-left bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm transition hover:border-rose-300">
                     <span class="text-[10px] sm:text-xs font-semibold text-rose-500 uppercase tracking-wider">Faltas</span>
                     <div class="text-xl sm:text-2xl font-bold text-rose-600 mt-0.5" id="stat-absent">0</div>
-                </div>
+                </button>
             </div>
 
 
             <!-- Lista de Pacientes -->
             <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
                 <div class="p-3.5 sm:p-4 bg-slate-50/50 border-b border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-                    <span class="text-xs sm:text-sm font-semibold text-slate-700 w-full sm:w-auto">Lista de Pacientes do Dia</span>
+                    <span class="text-xs sm:text-sm font-semibold text-slate-700 w-full sm:w-auto" id="agenda-list-title">Lista de Pacientes do Dia</span>
                     <div class="relative w-full sm:w-64">
-                        <input type="text" id="search-patient" onkeyup="filterPatients()" placeholder="Buscar paciente..." class="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-700 focus:ring-1 focus:ring-brand-500 focus:outline-none">
+                        <input type="search" id="search-patient" oninput="renderAgenda()" placeholder="Buscar paciente ou CPF..." class="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-700 focus:ring-1 focus:ring-brand-500 focus:outline-none" aria-label="Buscar paciente">
                         <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-xs text-slate-400"></i>
                     </div>
                 </div>
@@ -253,12 +292,40 @@
 
 
 
+        <!-- ================= TELA: PACIENTES ================= -->
+        <section id="screen-patients" class="hidden space-y-4 sm:space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200/80 shadow-sm">
+                <div>
+                    <h2 class="text-xl sm:text-2xl font-bold text-slate-800">Pacientes</h2>
+                    <p class="text-xs sm:text-sm text-slate-500 mt-0.5">Prontuários cadastrados na clínica escola</p>
+                </div>
+                <button id="patients-new-btn" onclick="openAnamneseModal()" class="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-3 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition active:scale-[0.98]">
+                    <i class="fa-solid fa-user-plus text-sm"></i>
+                    <span>Novo Paciente</span>
+                </button>
+            </div>
+
+            <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                <div class="p-3.5 sm:p-4 bg-slate-50/50 border-b border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <span class="text-xs sm:text-sm font-semibold text-slate-700 w-full sm:w-auto" id="patients-count">0 pacientes</span>
+                    <div class="relative w-full sm:w-72">
+                        <input type="search" id="search-patients" oninput="renderPatients()" placeholder="Buscar por nome ou CPF..." class="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-700 focus:ring-1 focus:ring-brand-500 focus:outline-none" aria-label="Buscar paciente por nome ou CPF">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-xs text-slate-400"></i>
+                    </div>
+                </div>
+                <div class="divide-y divide-slate-100" id="patients-container"></div>
+            </div>
+        </section>
+
+
+
+
         <!-- ================= TELA 3: TELA DE EVOLUÇÃO (SOAP) ================= -->
         <section id="screen-evolution" class="hidden space-y-4 sm:space-y-6">
             <!-- Patient Top Header Info -->
             <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div class="flex items-start sm:items-center gap-3">
-                    <button onclick="navigateHome()" class="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition mt-0.5 sm:mt-0">
+                    <button onclick="leaveEvolution()" class="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition mt-0.5 sm:mt-0" aria-label="Voltar para a agenda">
                         <i class="fa-solid fa-arrow-left text-lg"></i>
                     </button>
                     <div>
@@ -273,13 +340,24 @@
 
                 <!-- Desktop Quick Drawer Toggle & Save Draft -->
                 <div class="flex items-center gap-2 self-end md:self-auto">
+                    <span id="draft-status" class="text-[11px] text-slate-400 hidden sm:inline"></span>
                     <button onclick="toggleDrawer(true)" class="hidden md:flex px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold rounded-xl text-xs sm:text-sm items-center gap-2 border border-indigo-200 shadow-sm transition">
                         <i class="fa-solid fa-clock-rotate-left text-indigo-600"></i>
                         <span>Consultar Histórico</span>
                     </button>
-                    <button onclick="saveDraft()" class="p-2.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-xl border border-slate-200 transition" title="Salvar Rascunho">
+                    <button onclick="saveDraft()" class="p-2.5 bg-slate-50 text-slate-600 hover:bg-slate-100 rounded-xl border border-slate-200 transition" title="Salvar Rascunho" aria-label="Salvar Rascunho">
                         <i class="fa-regular fa-floppy-disk text-lg"></i>
                     </button>
+                </div>
+            </div>
+
+
+            <!-- Observação do professor (modo correção) -->
+            <div id="evo-correction-banner" class="hidden p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 text-xs sm:text-sm flex items-start gap-3">
+                <i class="fa-solid fa-triangle-exclamation text-amber-500 text-lg mt-0.5"></i>
+                <div>
+                    <p class="font-bold" id="evo-correction-title">Correção solicitada</p>
+                    <p class="mt-1 whitespace-pre-line" id="evo-correction-text"></p>
                 </div>
             </div>
 
@@ -287,27 +365,33 @@
             <!-- Evolution SOAP Form Container -->
             <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <!-- Navigation Tabs (S - O - A - P) -->
-                <div class="border-b border-slate-200 bg-slate-50/50 flex overflow-x-auto no-scrollbar scroll-smooth">
+                <div class="border-b border-slate-200 bg-slate-50/50 flex overflow-x-auto no-scrollbar scroll-smooth" role="tablist">
                     <button type="button" onclick="switchSoapTab('tab-subjetivo')" id="btn-tab-subjetivo" class="soap-tab-btn flex-1 py-3 px-4 font-semibold text-xs sm:text-sm border-b-2 border-brand-600 text-brand-600 flex items-center justify-center gap-2 whitespace-nowrap min-w-[110px]">
                         <span class="w-5 h-5 rounded-full bg-brand-100 text-brand-700 text-[10px] flex items-center justify-center font-bold">S</span>
                         Subjetivo
+                        <i class="tab-check fa-solid fa-circle-check text-emerald-500 hidden"></i>
                     </button>
                     <button type="button" onclick="switchSoapTab('tab-objetivo')" id="btn-tab-objetivo" class="soap-tab-btn flex-1 py-3 px-4 font-semibold text-xs sm:text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center justify-center gap-2 whitespace-nowrap min-w-[110px]">
                         <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-600 text-[10px] flex items-center justify-center font-bold">O</span>
                         Objetivo
+                        <i class="tab-check fa-solid fa-circle-check text-emerald-500 hidden"></i>
                     </button>
                     <button type="button" onclick="switchSoapTab('tab-avaliacao')" id="btn-tab-avaliacao" class="soap-tab-btn flex-1 py-3 px-4 font-semibold text-xs sm:text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center justify-center gap-2 whitespace-nowrap min-w-[110px]">
                         <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-600 text-[10px] flex items-center justify-center font-bold">A</span>
                         Conduta
+                        <i class="tab-check fa-solid fa-circle-check text-emerald-500 hidden"></i>
                     </button>
                     <button type="button" onclick="switchSoapTab('tab-plano')" id="btn-tab-plano" class="soap-tab-btn flex-1 py-3 px-4 font-semibold text-xs sm:text-sm border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center justify-center gap-2 whitespace-nowrap min-w-[110px]">
                         <span class="w-5 h-5 rounded-full bg-slate-200 text-slate-600 text-[10px] flex items-center justify-center font-bold">P</span>
                         Plano
+                        <i class="tab-check fa-solid fa-circle-check text-emerald-500 hidden"></i>
                     </button>
                 </div>
 
 
-                <form id="evolution-form" onsubmit="handleFinishEvolution(event)" class="p-4 sm:p-6">
+                <form id="evolution-form" onsubmit="handleFinishEvolution(event)" class="p-4 sm:p-6" novalidate>
+                    <div id="evo-form-error" class="hidden mb-4 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium" role="alert"></div>
+
                     <!-- TAB S: SUBJETIVO -->
                     <div id="tab-subjetivo" class="soap-tab-content space-y-4">
                         <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2">
@@ -318,8 +402,8 @@
 
                         <!-- EVA Scale Mobile Optimized -->
                         <div class="bg-slate-50 p-3.5 sm:p-4 rounded-xl border border-slate-200 space-y-2">
-                            <label class="block text-xs font-semibold text-slate-700 uppercase">Escala da Dor (EVA): <span id="eva-value-display" class="font-bold text-brand-600 text-sm">5 / 10</span></label>
-                            <input type="range" id="soap-eva" min="0" max="10" value="5" oninput="document.getElementById('eva-value-display').innerText = this.value + ' / 10'" class="w-full h-2 accent-brand-600 cursor-pointer rounded-lg bg-slate-200">
+                            <label for="soap-eva" class="block text-xs font-semibold text-slate-700 uppercase">Escala da Dor (EVA): <span id="eva-value-display" class="font-bold text-brand-600 text-sm">5 / 10</span></label>
+                            <input type="range" id="soap-eva" min="0" max="10" value="5" oninput="updateEvaDisplay()" class="w-full h-2 accent-brand-600 cursor-pointer rounded-lg bg-slate-200">
                             <div class="flex justify-between text-[10px] text-slate-400 font-semibold uppercase">
                                 <span>0 - Sem Dor</span>
                                 <span>5 - Moderada</span>
@@ -329,8 +413,8 @@
 
 
                         <div>
-                            <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Queixas e Comentários</label>
-                            <textarea id="soap-subjetivo-text" rows="4" required placeholder="Ex: Paciente relata melhora na mobilidade do ombro direito após a aplicação das condutas anteriores, porém ainda refere fisgadas ao realizar elevação..." class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 focus:ring-2 focus:ring-brand-500 focus:outline-none"></textarea>
+                            <label for="soap-subjetivo-text" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Queixas e Comentários <span class="text-rose-500">*</span></label>
+                            <textarea id="soap-subjetivo-text" rows="4" placeholder="Ex: Paciente relata melhora na mobilidade do ombro direito após a aplicação das condutas anteriores, porém ainda refere fisgadas ao realizar elevação..." class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 focus:ring-2 focus:ring-brand-500 focus:outline-none"></textarea>
                         </div>
                     </div>
 
@@ -340,25 +424,25 @@
                         <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2">
                             <i class="fa-solid fa-heart-pulse text-brand-600"></i> Dados Objetivos e Aferições
                         </h3>
-                       
+
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
-                                <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Pressão Arterial (PA)</label>
-                                <input type="text" id="soap-pa" placeholder="Ex: 120/80 mmHg" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                                <label for="soap-pa" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Pressão Arterial (PA)</label>
+                                <input type="text" id="soap-pa" inputmode="numeric" placeholder="Ex: 120/80 mmHg" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
                             </div>
                             <div>
-                                <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Frequência Cardíaca (FC)</label>
-                                <input type="text" id="soap-fc" placeholder="Ex: 75 bpm" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                                <label for="soap-fc" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Frequência Cardíaca (FC)</label>
+                                <input type="text" id="soap-fc" inputmode="numeric" placeholder="Ex: 75 bpm" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
                             </div>
                             <div>
-                                <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Saturação SpO2</label>
-                                <input type="text" id="soap-spo2" placeholder="Ex: 98%" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                                <label for="soap-spo2" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Saturação SpO2</label>
+                                <input type="text" id="soap-spo2" inputmode="numeric" placeholder="Ex: 98%" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
                             </div>
                         </div>
 
 
                         <div>
-                            <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Exame Físico / Avaliação Funcional</label>
+                            <label for="soap-objetivo-text" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Exame Físico / Avaliação Funcional</label>
                             <textarea id="soap-objetivo-text" rows="4" placeholder="Ex: Amplitude de movimento de flexão do ombro: 110°. Força muscular Grau 4 para deltoide..." class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 focus:ring-2 focus:ring-brand-500 focus:outline-none"></textarea>
                         </div>
                     </div>
@@ -389,8 +473,8 @@
 
 
                         <div>
-                            <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Descrição Detalhada do Tratamento</label>
-                            <textarea id="soap-conduta-text" rows="4" required placeholder="Ex: Realizada liberação miofascial em trapézio. 3 séries de 10 repetições de fortalecimento..." class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 focus:ring-2 focus:ring-brand-500 focus:outline-none"></textarea>
+                            <label for="soap-conduta-text" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Descrição Detalhada do Tratamento <span class="text-rose-500">*</span></label>
+                            <textarea id="soap-conduta-text" rows="4" placeholder="Ex: Realizada liberação miofascial em trapézio. 3 séries de 10 repetições de fortalecimento..." class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 focus:ring-2 focus:ring-brand-500 focus:outline-none"></textarea>
                         </div>
                     </div>
 
@@ -403,21 +487,31 @@
 
 
                         <div>
-                            <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Orientações para Casa & Conduta para Próxima Sessão</label>
+                            <label for="soap-plano-text" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Orientações para Casa & Conduta para Próxima Sessão</label>
                             <textarea id="soap-plano-text" rows="4" placeholder="Ex: Paciente orientado a realizar compressa de gelo por 20 minutos 2x ao dia..." class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm text-slate-800 focus:ring-2 focus:ring-brand-500 focus:outline-none"></textarea>
                         </div>
                     </div>
 
 
                     <!-- Action Bar Buttons -->
-                    <div class="mt-6 pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-end gap-2.5">
-                        <button type="button" onclick="navigateHome()" class="w-full sm:w-auto order-2 sm:order-1 px-5 py-3 text-slate-600 hover:bg-slate-100 font-semibold rounded-xl text-xs sm:text-sm transition">
-                            Cancelar
-                        </button>
-                        <button type="submit" class="w-full sm:w-auto order-1 sm:order-2 px-6 py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl text-xs sm:text-sm shadow-md transition flex items-center justify-center gap-2 active:scale-[0.98]">
-                            <i class="fa-solid fa-paper-plane"></i>
-                            <span>Finalizar Atendimento</span>
-                        </button>
+                    <div class="mt-6 pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2.5">
+                        <div class="flex items-center gap-2 w-full sm:w-auto order-3 sm:order-1">
+                            <button type="button" id="evo-prev-btn" onclick="stepSoapTab(-1)" class="flex-1 sm:flex-initial px-4 py-2.5 text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 font-semibold rounded-xl text-xs transition">
+                                <i class="fa-solid fa-chevron-left mr-1"></i> Anterior
+                            </button>
+                            <button type="button" id="evo-next-btn" onclick="stepSoapTab(1)" class="flex-1 sm:flex-initial px-4 py-2.5 text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 font-semibold rounded-xl text-xs transition">
+                                Próxima <i class="fa-solid fa-chevron-right ml-1"></i>
+                            </button>
+                        </div>
+                        <div class="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto order-1 sm:order-2">
+                            <button type="button" id="evo-cancel-btn" onclick="cancelEvolution()" class="w-full sm:w-auto order-2 sm:order-1 px-5 py-3 text-slate-600 hover:bg-slate-100 font-semibold rounded-xl text-xs sm:text-sm transition">
+                                Cancelar
+                            </button>
+                            <button type="submit" id="evo-submit-btn" class="w-full sm:w-auto order-1 sm:order-2 px-6 py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-xl text-xs sm:text-sm shadow-md transition flex items-center justify-center gap-2 active:scale-[0.98] disabled:opacity-60 disabled:cursor-wait">
+                                <i class="fa-solid fa-paper-plane"></i>
+                                <span id="evo-submit-label">Finalizar Atendimento</span>
+                            </button>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -425,7 +519,7 @@
 
 
         <!-- FLOATING BUTTON (FAB) PARA HISTÓRICO NO CELULAR -->
-        <button id="fab-history-btn" onclick="toggleDrawer(true)" class="hidden fixed bottom-20 right-4 z-40 bg-indigo-600 hover:bg-indigo-700 text-white p-3.5 rounded-full shadow-2xl flex items-center gap-2 border-2 border-white transition active:scale-95">
+        <button id="fab-history-btn" onclick="toggleDrawer(true)" class="hidden md:hidden fixed bottom-20 right-4 z-40 bg-indigo-600 hover:bg-indigo-700 text-white p-3.5 rounded-full shadow-2xl items-center gap-2 border-2 border-white transition active:scale-95">
             <i class="fa-solid fa-clock-rotate-left text-lg"></i>
             <span class="text-xs font-bold pr-1">Histórico</span>
         </button>
@@ -434,8 +528,8 @@
 
 
         <!-- ================= TELA 4: VISÃO DO PROFESSOR ================= -->
-        <section id="screen-teacher" class="hidden space-y-6">
-            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <section id="screen-teacher" class="hidden space-y-4 sm:space-y-6">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm">
                 <div>
                     <h2 class="text-xl sm:text-2xl font-bold text-slate-800">Painel do Professor Orientador</h2>
                     <p class="text-xs sm:text-sm text-slate-500 mt-0.5">Revisão e validação de evoluções dos estagiários</p>
@@ -448,11 +542,36 @@
                 </div>
             </div>
 
+            <!-- Stats do professor (clicável para filtrar) -->
+            <div class="grid grid-cols-3 gap-2.5 sm:gap-4">
+                <button type="button" data-filter="pending" onclick="setTeacherFilter('pending')" class="teacher-stat text-left bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm transition hover:border-amber-300">
+                    <span class="text-[10px] sm:text-xs font-semibold text-amber-500 uppercase tracking-wider">Pendentes</span>
+                    <div class="text-xl sm:text-2xl font-bold text-amber-600 mt-0.5" id="tstat-pending">0</div>
+                </button>
+                <button type="button" data-filter="correction" onclick="setTeacherFilter('correction')" class="teacher-stat text-left bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm transition hover:border-orange-300">
+                    <span class="text-[10px] sm:text-xs font-semibold text-orange-500 uppercase tracking-wider">Em correção</span>
+                    <div class="text-xl sm:text-2xl font-bold text-orange-600 mt-0.5" id="tstat-correction">0</div>
+                </button>
+                <button type="button" data-filter="approved" onclick="setTeacherFilter('approved')" class="teacher-stat text-left bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm transition hover:border-emerald-300">
+                    <span class="text-[10px] sm:text-xs font-semibold text-emerald-500 uppercase tracking-wider">Aprovadas</span>
+                    <div class="text-xl sm:text-2xl font-bold text-emerald-600 mt-0.5" id="tstat-approved">0</div>
+                </button>
+            </div>
+
 
             <!-- Table of Pending Reviews -->
             <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
-                <div class="p-4 bg-slate-50/50 border-b border-slate-200">
-                    <h3 class="font-bold text-slate-700 text-xs sm:text-sm">Evoluções Registradas pelos Alunos</h3>
+                <div class="p-3.5 sm:p-4 bg-slate-50/50 border-b border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 w-full sm:w-auto overflow-x-auto no-scrollbar" id="teacher-tabs">
+                        <button type="button" data-filter="pending" onclick="setTeacherFilter('pending')" class="teacher-tab flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap">Pendentes</button>
+                        <button type="button" data-filter="correction" onclick="setTeacherFilter('correction')" class="teacher-tab flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap">Em correção</button>
+                        <button type="button" data-filter="approved" onclick="setTeacherFilter('approved')" class="teacher-tab flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap">Aprovadas</button>
+                        <button type="button" data-filter="all" onclick="setTeacherFilter('all')" class="teacher-tab flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap">Todas</button>
+                    </div>
+                    <div class="relative w-full sm:w-64">
+                        <input type="search" id="search-teacher" oninput="renderTeacherDashboard()" placeholder="Buscar paciente ou aluno..." class="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-700 focus:ring-1 focus:ring-brand-500 focus:outline-none" aria-label="Buscar paciente ou aluno">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-xs text-slate-400"></i>
+                    </div>
                 </div>
 
 
@@ -467,24 +586,12 @@
 
 
     <!-- BARRA DE NAVEGAÇÃO INFERIOR PARA MOBILE (BOTTOM NAV) -->
-    <nav id="mobile-bottom-nav" class="hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 z-40 md:hidden flex justify-around items-center h-16 shadow-lg">
-        <button onclick="navigateHome()" class="flex flex-col items-center justify-center text-slate-500 hover:text-brand-600 focus:text-brand-600 w-full h-full">
-            <i class="fa-solid fa-calendar-day text-lg"></i>
-            <span class="text-[10px] font-medium mt-1">Agenda</span>
-        </button>
-        <button id="nav-item-evolution" onclick="quickNavEvolution()" class="flex flex-col items-center justify-center text-slate-400 hover:text-brand-600 focus:text-brand-600 w-full h-full">
-            <i class="fa-solid fa-notes-medical text-lg"></i>
-            <span class="text-[10px] font-medium mt-1">Evolução</span>
-        </button>
-        <button onclick="toggleDrawer(true)" class="flex flex-col items-center justify-center text-slate-500 hover:text-indigo-600 focus:text-indigo-600 w-full h-full">
-            <i class="fa-solid fa-clock-rotate-left text-lg"></i>
-            <span class="text-[10px] font-medium mt-1">Histórico</span>
-        </button>
-    </nav>
+    <nav id="mobile-bottom-nav" class="hidden flex md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-slate-200 z-40 justify-around items-center h-16 shadow-lg"></nav>
 
 
-    <footer class="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-400 mb-16 md:mb-0">
-        PhysioEdu &copy; 2026 - Trabalho Interdisciplinar de Fisioterapia & Tecnologia
+    <footer id="main-footer" class="bg-white border-t border-slate-200 py-4 px-4 text-center text-xs text-slate-400 space-y-1">
+        <p>PhysioEdu &copy; 2026 - Trabalho Interdisciplinar de Fisioterapia & Tecnologia</p>
+        <p id="mode-indicator" class="text-[11px]"></p>
     </footer>
 
 
@@ -493,8 +600,8 @@
     <!-- ================= MODAIS & GAVETAS RESPONSIVAS ================= -->
 
 
-    <!-- GAVETA LATERAL / BOTTOM SHEET: HISTÓRICO DO PACIENTE (SEM SAIR DA TELA) -->
-    <div id="drawer-history" class="fixed inset-0 z-50 overflow-hidden hidden">
+    <!-- GAVETA LATERAL / BOTTOM SHEET: PRONTUÁRIO / HISTÓRICO DO PACIENTE -->
+    <div id="drawer-history" class="fixed inset-0 z-50 overflow-hidden hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-title">
         <!-- Backdrop -->
         <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity bottom-sheet-overlay" onclick="toggleDrawer(false)"></div>
 
@@ -502,7 +609,7 @@
         <div class="fixed inset-y-0 right-0 max-w-full flex pl-0 md:pl-10 w-full md:w-auto">
             <!-- Mobile: desliza de baixo pra cima; Desktop: de lado -->
             <div class="w-full md:w-screen md:max-w-md bg-white shadow-2xl flex flex-col justify-between border-t md:border-t-0 md:border-l border-slate-200 mt-12 md:mt-0 rounded-t-3xl md:rounded-t-none bottom-sheet-content">
-               
+
                 <!-- Mobile Handle Indicator -->
                 <div class="w-12 h-1.5 bg-slate-300 rounded-full mx-auto my-2 md:hidden"></div>
 
@@ -510,12 +617,12 @@
                 <!-- Drawer Header -->
                 <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
                     <div>
-                        <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2">
+                        <h3 id="drawer-title" class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2">
                             <i class="fa-solid fa-history text-indigo-600"></i> Histórico do Paciente
                         </h3>
                         <p class="text-xs text-slate-500 mt-0.5" id="drawer-patient-name">Nome do Paciente</p>
                     </div>
-                    <button onclick="toggleDrawer(false)" class="p-2 text-slate-400 hover:text-slate-600 rounded-lg">
+                    <button onclick="toggleDrawer(false)" class="p-2 text-slate-400 hover:text-slate-600 rounded-lg" aria-label="Fechar">
                         <i class="fa-solid fa-xmark text-lg"></i>
                     </button>
                 </div>
@@ -528,7 +635,7 @@
 
 
                 <!-- Drawer Footer -->
-                <div class="p-4 border-t border-slate-200 bg-slate-50 text-center">
+                <div class="p-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row gap-2" id="drawer-footer">
                     <button onclick="toggleDrawer(false)" class="w-full py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold text-xs rounded-xl transition active:scale-[0.98]">
                         Voltar para a Evolução Atual
                     </button>
@@ -541,43 +648,45 @@
 
 
     <!-- MODAL: CADASTRO DE NOVO PACIENTE / ANAMNESE INICIAL -->
-    <div id="modal-anamnese" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm hidden">
+    <div id="modal-anamnese" class="modal fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm hidden" role="dialog" aria-modal="true" aria-labelledby="anamnese-title">
         <div class="bg-white w-full max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]">
             <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-                <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2">
-                    <i class="fa-solid fa-folder-plus text-emerald-600"></i> Cadastro de Anamnese Inicial
+                <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2" id="anamnese-title">
+                    <i class="fa-solid fa-folder-plus text-emerald-600"></i> <span>Cadastro de Anamnese Inicial</span>
                 </h3>
-                <button onclick="closeModal('modal-anamnese')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg">
+                <button onclick="closeModal('modal-anamnese')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg" aria-label="Fechar">
                     <i class="fa-solid fa-xmark text-lg"></i>
                 </button>
             </div>
 
 
-            <form id="anamnese-form" onsubmit="handleSaveAnamnese(event)" class="p-4 sm:p-6 overflow-y-auto space-y-4">
+            <form id="anamnese-form" onsubmit="handleSaveAnamnese(event)" class="p-4 sm:p-6 overflow-y-auto space-y-4" novalidate>
+                <div class="form-error hidden p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium" role="alert"></div>
+
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <div>
-                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Nome Completo</label>
-                        <input type="text" id="ana-name" required placeholder="Ex: Roberto Carlos Silva" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        <label for="ana-name" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Nome Completo <span class="text-rose-500">*</span></label>
+                        <input type="text" id="ana-name" data-field="name" autocomplete="off" placeholder="Ex: Roberto Carlos Silva" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">CPF</label>
-                        <input type="text" id="ana-cpf" required placeholder="000.000.000-00" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        <label for="ana-cpf" class="block text-xs font-semibold text-slate-700 uppercase mb-1">CPF <span class="text-rose-500">*</span></label>
+                        <input type="text" id="ana-cpf" data-field="cpf" data-mask="cpf" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
                     </div>
                 </div>
 
 
                 <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
                     <div>
-                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Idade</label>
-                        <input type="number" id="ana-age" required placeholder="Ex: 52" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        <label for="ana-age" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Idade <span class="text-rose-500">*</span></label>
+                        <input type="number" id="ana-age" data-field="age" min="0" max="120" placeholder="Ex: 52" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Horário Agendado</label>
-                        <input type="time" id="ana-time" required value="14:00" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        <label for="ana-phone" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Telefone</label>
+                        <input type="tel" id="ana-phone" data-field="phone" data-mask="phone" placeholder="(48) 99999-9999" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Especialidade</label>
-                        <select id="ana-type" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        <label for="ana-type" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Especialidade <span class="text-rose-500">*</span></label>
+                        <select id="ana-type" data-field="specialty" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
                             <option value="Ortopedia">Ortopedia</option>
                             <option value="Neurologia">Neurologia</option>
                             <option value="Respiratória">Respiratória</option>
@@ -586,16 +695,32 @@
                     </div>
                 </div>
 
+                <div>
+                    <label for="ana-diagnosis" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Diagnóstico Clínico / Região</label>
+                    <input type="text" id="ana-diagnosis" data-field="diagnosis" placeholder="Ex: Tendinopatia do supraespinhal — ombro direito" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                </div>
+
+                <div id="ana-schedule-fields" class="grid grid-cols-2 gap-3 sm:gap-4 p-3 rounded-xl bg-emerald-50/60 border border-emerald-100">
+                    <div>
+                        <label for="ana-date" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Data da 1ª Sessão <span class="text-rose-500">*</span></label>
+                        <input type="date" id="ana-date" data-field="date" class="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label for="ana-time" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Horário Agendado <span class="text-rose-500">*</span></label>
+                        <input type="time" id="ana-time" data-field="time" value="14:00" class="w-full p-3 bg-white border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                    </div>
+                </div>
+
 
                 <div>
-                    <label class="block text-xs font-semibold text-slate-700 uppercase mb-1">Queixa Principal (QP) & HDA</label>
-                    <textarea id="ana-history" rows="3" required placeholder="Descreva os sintomas iniciais, tempo de evolução e diagnóstico..." class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"></textarea>
+                    <label for="ana-history" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Queixa Principal (QP) & HDA <span class="text-rose-500">*</span></label>
+                    <textarea id="ana-history" data-field="history" rows="3" placeholder="Descreva os sintomas iniciais, tempo de evolução e diagnóstico..." class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none"></textarea>
                 </div>
 
 
                 <div class="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-end gap-2">
                     <button type="button" onclick="closeModal('modal-anamnese')" class="w-full sm:w-auto px-4 py-2.5 text-slate-600 hover:bg-slate-100 font-semibold text-xs sm:text-sm rounded-xl transition">Cancelar</button>
-                    <button type="submit" class="w-full sm:w-auto px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition">Salvar & Incluir na Agenda</button>
+                    <button type="submit" id="ana-submit" class="w-full sm:w-auto px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition disabled:opacity-60 disabled:cursor-wait">Salvar & Incluir na Agenda</button>
                 </div>
             </form>
         </div>
@@ -604,536 +729,197 @@
 
 
 
-    <!-- ================= JAVASCRIPT LOGIC & STATE MANAGEMENT ================= -->
-    <script>
-        // Simulated Database State
-        let currentUser = {
-            id: '202301982',
-            name: 'Lucas Andrade (Aluno)',
-            role: 'student'
-        };
-
-
-        let currentActivePatientId = null;
-
-
-        let patients = [
-            {
-                id: 1,
-                name: 'Maria Das Graças Silva',
-                cpf: '123.456.789-00',
-                age: 58,
-                time: '08:00',
-                specialty: 'Ortopedia (Joelho)',
-                status: 'pending',
-                history: [
-                    {
-                        date: '2026-09-22',
-                        student: 'Lucas Andrade',
-                        soap: {
-                            eva: 7,
-                            subjetivo: 'Paciente refere dor intensa na regiao patelar ao subir escadas.',
-                            objetivo: 'PA: 120/80 mmHg. Edema leve no joelho R. ADM flexao: 100°.',
-                            conduta: 'TENS convencional por 20 min. Mobilizacao patelar grau II e III. Fortalecimento leve de quadriceps.',
-                            plano: 'Orientado gelo em casa 20 min.'
-                        },
-                        teacherApproval: 'Aprovado por Profª. Dra. Helena'
-                    },
-                    {
-                        date: '2026-09-25',
-                        student: 'Lucas Andrade',
-                        soap: {
-                            eva: 5,
-                            subjetivo: 'Relata melhora na dor em repouso após aplicacao de gelo conforme orientado.',
-                            objetivo: 'PA: 118/75 mmHg. ADM flexao melhorou para 115°.',
-                            conduta: 'Ultrassom fisioterapico 1W/cm², cinesioterapia ativa assistida.',
-                            plano: 'Aumentar carga do fortalecimento na proxima sessao.'
-                        },
-                        teacherApproval: 'Aprovado por Profª. Dra. Helena'
-                    }
-                ]
-            },
-            {
-                id: 2,
-                name: 'João Pedro Oliveira',
-                cpf: '987.654.321-11',
-                age: 34,
-                time: '09:00',
-                specialty: 'Desportiva (Tornozelo)',
-                status: 'pending',
-                history: [
-                    {
-                        date: '2026-09-20',
-                        student: 'Beatriz Lima',
-                        soap: {
-                            eva: 4,
-                            subjetivo: 'Entorse de tornozelo grau II durante corrida. Refere instabilidade.',
-                            objetivo: 'Teste de gaveta anterior positivo leve. Sem equimose visivel.',
-                            conduta: 'Treino proprioceptivo na disco de equilibrio, bandagem funcional.',
-                            plano: 'Manter propriocepcao evolutiva.'
-                        },
-                        teacherApproval: 'Aprovado por Prof. Marcos'
-                    }
-                ]
-            },
-            {
-                id: 3,
-                name: 'Ana Beatris Souza',
-                cpf: '456.789.123-22',
-                age: 67,
-                time: '10:30',
-                specialty: 'Neurologia (Pós-AVE)',
-                status: 'completed',
-                history: []
-            }
-        ];
-
-
-        window.onload = function() {
-            const savedPatients = localStorage.getItem('physioedu_patients');
-            if (savedPatients) {
-                try {
-                    patients = JSON.parse(savedPatients);
-                } catch(e) { console.error('Error loading stored patients', e); }
-            }
-            updateDateDisplay();
-            renderAgenda();
-        };
-
-
-        function persistData() {
-            localStorage.setItem('physioedu_patients', JSON.stringify(patients));
-        }
-
-
-        function updateDateDisplay() {
-            const options = { weekday: 'long', month: 'long', day: 'numeric' };
-            const today = new Date().toLocaleDateString('pt-BR', options);
-            document.getElementById('current-date-display').innerText = today.charAt(0).toUpperCase() + today.slice(1);
-        }
-
-
-        function selectRole(role) {
-            currentUser.role = role;
-            const btnStudent = document.getElementById('role-student-btn');
-            const btnTeacher = document.getElementById('role-teacher-btn');
-            const idLabel = document.getElementById('login-id-label');
-            const idInput = document.getElementById('login-id');
-
-
-            if (role === 'student') {
-                btnStudent.className = "flex-1 py-2 px-3 text-sm font-semibold rounded-lg bg-white text-slate-800 shadow-sm transition-all flex items-center justify-center gap-2";
-                btnTeacher.className = "flex-1 py-2 px-3 text-sm font-semibold rounded-lg text-slate-600 hover:text-slate-800 transition-all flex items-center justify-center gap-2";
-                idLabel.innerText = "Matrícula do Aluno";
-                idInput.value = "202301982";
-                currentUser.name = "Lucas Andrade (Aluno)";
-            } else {
-                btnTeacher.className = "flex-1 py-2 px-3 text-sm font-semibold rounded-lg bg-white text-slate-800 shadow-sm transition-all flex items-center justify-center gap-2";
-                btnStudent.className = "flex-1 py-2 px-3 text-sm font-semibold rounded-lg text-slate-600 hover:text-slate-800 transition-all flex items-center justify-center gap-2";
-                idLabel.innerText = "Registro Funcional (Docente)";
-                idInput.value = "DOC-88392";
-                currentUser.name = "Profª. Dra. Helena";
-            }
-        }
-
-
-        function handleLogin(e) {
-            e.preventDefault();
-            document.getElementById('screen-login').classList.add('hidden');
-            document.getElementById('main-header').classList.remove('hidden');
-
-
-            document.getElementById('user-display-name').innerText = currentUser.name;
-            document.getElementById('user-display-role').innerText = currentUser.role === 'student' ? 'Estudante' : 'Professor';
-
-
-            if (currentUser.role === 'student') {
-                document.getElementById('screen-agenda').classList.remove('hidden');
-                document.getElementById('mobile-bottom-nav').classList.remove('hidden');
-                document.getElementById('mobile-bottom-nav').classList.add('flex');
-                renderAgenda();
-                showToast('Login efetuado com sucesso!', 'success');
-            } else {
-                document.getElementById('screen-teacher').classList.remove('hidden');
-                document.getElementById('mobile-bottom-nav').classList.add('hidden');
-                renderTeacherDashboard();
-                showToast('Painel do Docente Acessado', 'info');
-            }
-        }
-
-
-        function handleLogout() {
-            document.getElementById('screen-agenda').classList.add('hidden');
-            document.getElementById('screen-evolution').classList.add('hidden');
-            document.getElementById('screen-teacher').classList.add('hidden');
-            document.getElementById('main-header').classList.add('hidden');
-            document.getElementById('mobile-bottom-nav').classList.add('hidden');
-            document.getElementById('fab-history-btn').classList.add('hidden');
-            document.getElementById('screen-login').classList.remove('hidden');
-            showToast('Você saiu do sistema.', 'info');
-        }
-
-
-        function navigateHome() {
-            document.getElementById('screen-evolution').classList.add('hidden');
-            document.getElementById('fab-history-btn').classList.add('hidden');
-            if (currentUser.role === 'student') {
-                document.getElementById('screen-agenda').classList.remove('hidden');
-                renderAgenda();
-            } else {
-                document.getElementById('screen-teacher').classList.remove('hidden');
-                renderTeacherDashboard();
-            }
-        }
-
-
-        function quickNavEvolution() {
-            if (currentActivePatientId) {
-                document.getElementById('screen-agenda').classList.add('hidden');
-                document.getElementById('screen-evolution').classList.remove('hidden');
-                document.getElementById('fab-history-btn').classList.remove('hidden');
-                document.getElementById('fab-history-btn').classList.add('flex');
-            } else {
-                showToast('Selecione um paciente na agenda primeiro', 'info');
-            }
-        }
-
-
-        function renderAgenda() {
-            const container = document.getElementById('patient-list-container');
-            container.innerHTML = '';
-
-
-            let total = patients.length;
-            let pending = 0, completed = 0, absent = 0;
-
-
-            patients.forEach(patient => {
-                if (patient.status === 'pending' || patient.status === 'attending') pending++;
-                if (patient.status === 'completed') completed++;
-                if (patient.status === 'absent') absent++;
-
-
-                let statusBadge = '';
-                if (patient.status === 'pending') {
-                    statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200"><i class="fa-regular fa-clock mr-1"></i>Aguardando</span>`;
-                } else if (patient.status === 'attending') {
-                    statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Em Atendimento</span>`;
-                } else if (patient.status === 'completed') {
-                    statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200"><i class="fa-solid fa-check mr-1"></i>Atendido</span>`;
-                } else if (patient.status === 'absent') {
-                    statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200"><i class="fa-solid fa-user-xmark mr-1"></i>Faltou</span>`;
-                }
-
-
-                const row = document.createElement('div');
-                row.className = "p-3.5 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 hover:bg-slate-50 transition";
-                row.innerHTML = `
-                    <div class="flex items-center gap-3 w-full sm:w-auto">
-                        <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-slate-100 flex items-center justify-center font-bold text-slate-600 text-xs sm:text-sm border border-slate-200 shrink-0">
-                            ${patient.time}
-                        </div>
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center gap-1.5 flex-wrap">
-                                <h4 class="font-bold text-slate-800 text-sm sm:text-base truncate">${patient.name}</h4>
-                                ${statusBadge}
-                            </div>
-                            <p class="text-[11px] sm:text-xs text-slate-500 mt-0.5 truncate">${patient.specialty} • ${patient.age} anos</p>
-                        </div>
+    <!-- MODAL: AGENDAR SESSÃO -->
+    <div id="modal-schedule" class="modal fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm hidden" role="dialog" aria-modal="true" aria-labelledby="schedule-title">
+        <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2" id="schedule-title">
+                        <i class="fa-solid fa-calendar-plus text-brand-600"></i> Agendar Sessão
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-0.5" id="schedule-patient-name"></p>
+                </div>
+                <button onclick="closeModal('modal-schedule')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg" aria-label="Fechar">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <form id="schedule-form" onsubmit="handleSchedule(event)" class="p-4 sm:p-6 space-y-4" novalidate>
+                <div class="form-error hidden p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium" role="alert"></div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label for="schedule-date" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Data</label>
+                        <input type="date" id="schedule-date" data-field="date" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
                     </div>
-
-
-                    <div class="flex items-center gap-2 w-full sm:w-auto justify-end border-t sm:border-t-0 pt-2.5 sm:pt-0 border-slate-100">
-                        <button onclick="markAbsent(${patient.id})" class="px-3 py-2 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-600 rounded-xl text-xs font-semibold transition active:scale-95" title="Registrar Falta">
-                            <i class="fa-solid fa-user-xmark mr-1"></i> Falta
-                        </button>
-                        <button onclick="startEvolution(${patient.id})" class="flex-1 sm:flex-initial px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold shadow-sm transition flex items-center justify-center gap-1.5 active:scale-95">
-                            <i class="fa-solid fa-stethoscope"></i>
-                            <span>${patient.status === 'completed' ? 'Revisar' : 'Atender / Evoluir'}</span>
-                        </button>
+                    <div>
+                        <label for="schedule-time" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Horário</label>
+                        <input type="time" id="schedule-time" data-field="time" value="08:00" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
                     </div>
-                `;
-                container.appendChild(row);
-            });
+                </div>
+                <div class="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-end gap-2">
+                    <button type="button" onclick="closeModal('modal-schedule')" class="w-full sm:w-auto px-4 py-2.5 text-slate-600 hover:bg-slate-100 font-semibold text-xs sm:text-sm rounded-xl transition">Cancelar</button>
+                    <button type="submit" id="schedule-submit" class="w-full sm:w-auto px-5 py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition disabled:opacity-60 disabled:cursor-wait">Agendar Sessão</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
 
-            document.getElementById('stat-total').innerText = total;
-            document.getElementById('stat-pending').innerText = pending;
-            document.getElementById('stat-completed').innerText = completed;
-            document.getElementById('stat-absent').innerText = absent;
-        }
 
 
-        function markAbsent(patientId) {
-            const p = patients.find(x => x.id === patientId);
-            if (p) {
-                p.status = 'absent';
-                persistData();
-                renderAgenda();
-                showToast(`Falta registrada para ${p.name}`, 'info');
-            }
-        }
+    <!-- MODAL: DETALHES DA EVOLUÇÃO (e revisão do professor) -->
+    <div id="modal-evolution-view" class="modal fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm hidden" role="dialog" aria-modal="true" aria-labelledby="evoview-title">
+        <div class="bg-white w-full max-w-2xl rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+            <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex items-start justify-between gap-3">
+                <div class="min-w-0">
+                    <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2" id="evoview-title">
+                        <i class="fa-solid fa-file-medical text-brand-600"></i> <span>Evolução</span>
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-0.5 truncate" id="evoview-subtitle"></p>
+                </div>
+                <button onclick="closeModal('modal-evolution-view')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg" aria-label="Fechar">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <div class="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs sm:text-sm" id="evoview-body"></div>
+            <div class="p-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center justify-end gap-2" id="evoview-footer"></div>
+        </div>
+    </div>
 
 
-        function filterPatients() {
-            const term = document.getElementById('search-patient').value.toLowerCase();
-            const rows = document.getElementById('patient-list-container').children;
-            Array.from(rows).forEach(row => {
-                const text = row.innerText.toLowerCase();
-                row.style.display = text.includes(term) ? 'flex' : 'none';
-            });
-        }
 
 
-        function startEvolution(patientId) {
-            currentActivePatientId = patientId;
-            const patient = patients.find(p => p.id === patientId);
-            if (!patient) return;
-
-
-            patient.status = 'attending';
-            persistData();
-
-
-            document.getElementById('evo-patient-name').innerText = patient.name;
-            document.getElementById('evo-patient-meta').innerText = `CPF: ${patient.cpf} | Idade: ${patient.age} anos | ${patient.specialty}`;
-
-
-            document.getElementById('soap-subjetivo-text').value = '';
-            document.getElementById('soap-pa').value = '120/80 mmHg';
-            document.getElementById('soap-fc').value = '72 bpm';
-            document.getElementById('soap-spo2').value = '98%';
-            document.getElementById('soap-objetivo-text').value = '';
-            document.getElementById('soap-conduta-text').value = '';
-            document.getElementById('soap-plano-text').value = '';
-
-
-            renderHistoryDrawer(patient);
-
-
-            document.getElementById('screen-agenda').classList.add('hidden');
-            document.getElementById('screen-evolution').classList.remove('hidden');
-           
-            // Show Mobile Floating Action Button (FAB)
-            document.getElementById('fab-history-btn').classList.remove('hidden');
-            document.getElementById('fab-history-btn').classList.add('flex');
-
-
-            switchSoapTab('tab-subjetivo');
-        }
-
-
-        function switchSoapTab(tabId) {
-            document.querySelectorAll('.soap-tab-content').forEach(tab => tab.classList.add('hidden'));
-            document.querySelectorAll('.soap-tab-btn').forEach(btn => {
-                btn.classList.remove('border-brand-600', 'text-brand-600');
-                btn.classList.add('border-transparent', 'text-slate-500');
-            });
-
-
-            document.getElementById(tabId).classList.remove('hidden');
-
-
-            const activeBtn = document.getElementById('btn-' + tabId);
-            activeBtn.classList.remove('border-transparent', 'text-slate-500');
-            activeBtn.classList.add('border-brand-600', 'text-brand-600');
-        }
-
-
-        function saveDraft() {
-            showToast('Rascunho salvo temporariamente!', 'success');
-        }
-
-
-        function handleFinishEvolution(e) {
-            e.preventDefault();
-            const patient = patients.find(p => p.id === currentActivePatientId);
-            if (!patient) return;
-
-
-            const selectedCondutas = [];
-            document.querySelectorAll('.soap-conduta-check:checked').forEach(cb => selectedCondutas.push(cb.value));
-
-
-            const newEntry = {
-                date: new Date().toISOString().split('T')[0],
-                student: currentUser.name,
-                soap: {
-                    eva: document.getElementById('soap-eva').value,
-                    subjetivo: document.getElementById('soap-subjetivo-text').value,
-                    objetivo: `PA: ${document.getElementById('soap-pa').value} | FC: ${document.getElementById('soap-fc').value}. ${document.getElementById('soap-objetivo-text').value}`,
-                    conduta: `${selectedCondutas.join(', ')}. ${document.getElementById('soap-conduta-text').value}`,
-                    plano: document.getElementById('soap-plano-text').value
-                },
-                teacherApproval: 'Pendente de Validação'
-            };
-
-
-            patient.history.unshift(newEntry);
-            patient.status = 'completed';
-            persistData();
-
-
-            showToast('Evolução gravada com sucesso!', 'success');
-            navigateHome();
-        }
-
-
-        function toggleDrawer(show) {
-            const drawer = document.getElementById('drawer-history');
-            if (show) {
-                if (currentActivePatientId) {
-                    const patient = patients.find(p => p.id === currentActivePatientId);
-                    if (patient) renderHistoryDrawer(patient);
-                }
-                drawer.classList.remove('hidden');
-            } else {
-                drawer.classList.add('hidden');
-            }
-        }
-
-
-        function renderHistoryDrawer(patient) {
-            document.getElementById('drawer-patient-name').innerText = `${patient.name} - Prontuário #${patient.id}`;
-            const container = document.getElementById('history-timeline-container');
-            container.innerHTML = '';
-
-
-            if (patient.history.length === 0) {
-                container.innerHTML = `<p class="text-xs text-slate-400 text-center py-8">Nenhum atendimento anterior registrado para este paciente.</p>`;
-                return;
-            }
-
-
-            patient.history.forEach((h) => {
-                const card = document.createElement('div');
-                card.className = "p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs";
-                card.innerHTML = `
-                    <div class="flex items-center justify-between font-bold text-slate-700 border-b border-slate-200 pb-1.5">
-                        <span class="text-brand-700"><i class="fa-regular fa-calendar-check mr-1"></i> Data: ${h.date}</span>
-                        <span class="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-md font-semibold text-[10px]">${h.teacherApproval}</span>
+    <!-- MODAL: CRIAR CONTA -->
+    <div id="modal-register" class="modal fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm hidden" role="dialog" aria-modal="true" aria-labelledby="register-title">
+        <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+            <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2" id="register-title">
+                    <i class="fa-solid fa-user-plus text-brand-600"></i> Criar Conta
+                </h3>
+                <button onclick="closeModal('modal-register')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg" aria-label="Fechar">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <form id="register-form" onsubmit="handleRegister(event)" class="p-4 sm:p-6 space-y-3.5 overflow-y-auto" novalidate>
+                <div class="form-error hidden p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium" role="alert"></div>
+                <div>
+                    <span class="block text-xs font-semibold text-slate-700 uppercase mb-1">Perfil</span>
+                    <div class="bg-slate-100 p-1 rounded-xl flex gap-1 border border-slate-200" data-field="role">
+                        <label class="flex-1">
+                            <input type="radio" name="reg-role" value="student" class="peer sr-only" checked>
+                            <span class="block text-center py-2 rounded-lg text-xs font-semibold text-slate-600 cursor-pointer peer-checked:bg-white peer-checked:text-slate-800 peer-checked:shadow-sm"><i class="fa-solid fa-user-graduate mr-1"></i> Estudante</span>
+                        </label>
+                        <label class="flex-1">
+                            <input type="radio" name="reg-role" value="teacher" class="peer sr-only">
+                            <span class="block text-center py-2 rounded-lg text-xs font-semibold text-slate-600 cursor-pointer peer-checked:bg-white peer-checked:text-slate-800 peer-checked:shadow-sm"><i class="fa-solid fa-user-tie mr-1"></i> Professor</span>
+                        </label>
                     </div>
-                    <p><strong>Estagiário:</strong> ${h.student}</p>
-                    <p><strong>EVA (Dor):</strong> ${h.soap.eva} / 10</p>
-                    <p><strong>S (Subjetivo):</strong> ${h.soap.subjetivo}</p>
-                    <p><strong>O (Objetivo):</strong> ${h.soap.objetivo}</p>
-                    <p><strong>A (Conduta):</strong> ${h.soap.conduta}</p>
-                    <p><strong>P (Plano):</strong> ${h.soap.plano}</p>
-                `;
-                container.appendChild(card);
-            });
-        }
+                </div>
+                <div>
+                    <label for="reg-name" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Nome Completo</label>
+                    <input type="text" id="reg-name" data-field="name" autocomplete="name" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label for="reg-matricula" class="block text-xs font-semibold text-slate-700 uppercase mb-1" id="reg-matricula-label">Matrícula</label>
+                        <input type="text" id="reg-matricula" data-field="matricula" autocomplete="username" placeholder="Ex: 202401234" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label for="reg-email" class="block text-xs font-semibold text-slate-700 uppercase mb-1">E-mail</label>
+                        <input type="email" id="reg-email" data-field="email" autocomplete="email" placeholder="voce@universidade.edu.br" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label for="reg-password" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Senha</label>
+                        <input type="password" id="reg-password" data-field="password" autocomplete="new-password" placeholder="Mínimo 6 caracteres" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label for="reg-password2" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Confirmar Senha</label>
+                        <input type="password" id="reg-password2" data-field="password2" autocomplete="new-password" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    </div>
+                </div>
+                <div class="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-end gap-2">
+                    <button type="button" onclick="closeModal('modal-register')" class="w-full sm:w-auto px-4 py-2.5 text-slate-600 hover:bg-slate-100 font-semibold text-xs sm:text-sm rounded-xl transition">Cancelar</button>
+                    <button type="submit" id="reg-submit" class="w-full sm:w-auto px-5 py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition disabled:opacity-60 disabled:cursor-wait">Criar Conta e Entrar</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
 
-        function renderTeacherDashboard() {
-            const container = document.getElementById('teacher-reviews-container');
-            container.innerHTML = '';
-            let countPending = 0;
 
 
-            patients.forEach(patient => {
-                patient.history.forEach(item => {
-                    if (item.teacherApproval === 'Pendente de Validação') {
-                        countPending++;
-                        const row = document.createElement('div');
-                        row.className = "p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-3";
-                        row.innerHTML = `
-                            <div class="space-y-1 w-full md:w-auto">
-                                <div class="flex items-center justify-between md:justify-start gap-2">
-                                    <h4 class="font-bold text-slate-800 text-xs sm:text-sm">${patient.name}</h4>
-                                    <span class="text-[10px] text-slate-400">Aluno: ${item.student}</span>
-                                </div>
-                                <p class="text-xs text-slate-600"><strong>Conduta:</strong> ${item.soap.conduta}</p>
-                                <p class="text-xs text-slate-500"><strong>Subjetivo:</strong> ${item.soap.subjetivo}</p>
-                            </div>
-                            <div class="flex items-center gap-2 w-full md:w-auto justify-end pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 shrink-0">
-                                <button onclick="approveEvolution('${patient.name}')" class="flex-1 md:flex-initial px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition active:scale-95">
-                                    <i class="fa-solid fa-check mr-1"></i> Aprovar
-                                </button>
-                                <button onclick="showToast('Solicitado ajuste para o aluno', 'info')" class="flex-1 md:flex-initial px-3 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-semibold shadow-sm transition active:scale-95">
-                                    Solicitar Correção
-                                </button>
-                            </div>
-                        `;
-                        container.appendChild(row);
-                    }
-                });
-            });
+    <!-- MODAL: RECUPERAR SENHA -->
+    <div id="modal-reset" class="modal fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm hidden" role="dialog" aria-modal="true" aria-labelledby="reset-title">
+        <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2" id="reset-title">
+                    <i class="fa-solid fa-key text-brand-600"></i> Redefinir Senha
+                </h3>
+                <button onclick="closeModal('modal-reset')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg" aria-label="Fechar">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <form id="reset-form" onsubmit="handleResetPassword(event)" class="p-4 sm:p-6 space-y-3.5" novalidate>
+                <p class="text-xs text-slate-500">Confirme sua matrícula e o e-mail cadastrado para definir uma nova senha.</p>
+                <div class="form-error hidden p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium" role="alert"></div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label for="reset-matricula" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Matrícula</label>
+                        <input type="text" id="reset-matricula" data-field="matricula" autocomplete="username" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label for="reset-email" class="block text-xs font-semibold text-slate-700 uppercase mb-1">E-mail cadastrado</label>
+                        <input type="email" id="reset-email" data-field="email" autocomplete="email" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label for="reset-password" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Nova Senha</label>
+                        <input type="password" id="reset-password" data-field="password" autocomplete="new-password" placeholder="Mínimo 6 caracteres" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    </div>
+                    <div>
+                        <label for="reset-password2" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Confirmar Senha</label>
+                        <input type="password" id="reset-password2" data-field="password2" autocomplete="new-password" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    </div>
+                </div>
+                <div class="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-end gap-2">
+                    <button type="button" onclick="closeModal('modal-reset')" class="w-full sm:w-auto px-4 py-2.5 text-slate-600 hover:bg-slate-100 font-semibold text-xs sm:text-sm rounded-xl transition">Cancelar</button>
+                    <button type="submit" id="reset-submit" class="w-full sm:w-auto px-5 py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition disabled:opacity-60 disabled:cursor-wait">Redefinir Senha</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
 
-            if (countPending === 0) {
-                container.innerHTML = `<p class="p-8 text-center text-xs text-slate-400">Todas as evoluções foram revisadas e validadas!</p>`;
-            }
 
 
-            document.getElementById('pending-count-badge').innerText = `${countPending} Pendentes`;
-        }
+    <!-- MODAL: CONFIRMAÇÃO -->
+    <div id="modal-confirm" class="modal fixed inset-0 z-[60] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm hidden" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title">
+        <div class="bg-white w-full max-w-sm rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 p-5 sm:p-6">
+            <div class="flex items-start gap-3">
+                <div id="confirm-icon" class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-brand-50 text-brand-600">
+                    <i class="fa-solid fa-circle-question text-lg"></i>
+                </div>
+                <div>
+                    <h3 id="confirm-title" class="font-bold text-slate-800 text-sm sm:text-base">Confirmar</h3>
+                    <p id="confirm-message" class="text-xs sm:text-sm text-slate-500 mt-1"></p>
+                </div>
+            </div>
+            <div class="mt-5 flex flex-col-reverse sm:flex-row items-center justify-end gap-2">
+                <button type="button" id="confirm-cancel" class="w-full sm:w-auto px-4 py-2.5 text-slate-600 hover:bg-slate-100 font-semibold text-xs sm:text-sm rounded-xl transition">Cancelar</button>
+                <button type="button" id="confirm-ok" class="w-full sm:w-auto px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition">Confirmar</button>
+            </div>
+        </div>
+    </div>
 
 
-        function approveEvolution(patientName) {
-            const p = patients.find(x => x.name === patientName);
-            if (p && p.history.length > 0) {
-                p.history[0].teacherApproval = `Aprovado por ${currentUser.name}`;
-                persistData();
-                renderTeacherDashboard();
-                showToast(`Evolução de ${p.name} aprovada!`, 'success');
-            }
-        }
 
 
-        function openModal(id) {
-            document.getElementById(id).classList.remove('hidden');
-        }
-
-
-        function closeModal(id) {
-            document.getElementById(id).classList.add('hidden');
-        }
-
-
-        function handleSaveAnamnese(e) {
-            e.preventDefault();
-            const newPatient = {
-                id: Date.now(),
-                name: document.getElementById('ana-name').value,
-                cpf: document.getElementById('ana-cpf').value,
-                age: document.getElementById('ana-age').value,
-                time: document.getElementById('ana-time').value,
-                specialty: document.getElementById('ana-type').value,
-                status: 'pending',
-                history: []
-            };
-
-
-            patients.push(newPatient);
-            persistData();
-            closeModal('modal-anamnese');
-            renderAgenda();
-            showToast('Novo paciente cadastrado na agenda!', 'success');
-        }
-
-
-        function showToast(message, type = 'info') {
-            const container = document.getElementById('toast-container');
-            const toast = document.createElement('div');
-
-
-            let bg = 'bg-slate-800 text-white';
-            if (type === 'success') bg = 'bg-emerald-600 text-white';
-            if (type === 'info') bg = 'bg-brand-700 text-white';
-
-
-            toast.className = `p-3 rounded-xl shadow-xl text-xs font-semibold flex items-center justify-between gap-3 ${bg} toast-animate pointer-events-auto`;
-            toast.innerHTML = `
-                <span>${message}</span>
-                <button onclick="this.parentElement.remove()" class="opacity-70 hover:opacity-100"><i class="fa-solid fa-xmark"></i></button>
-            `;
-
-
-            container.appendChild(toast);
-            setTimeout(() => {
-                toast.remove();
-            }, 3500);
-        }
-    </script>
+    <!-- ================= JAVASCRIPT ================= -->
+    <script src="assets/js/shared.js"></script>
+    <script src="assets/js/local-backend.js"></script>
+    <script src="assets/js/api.js"></script>
+    <script src="assets/js/app.js"></script>
 </body>
+</html>

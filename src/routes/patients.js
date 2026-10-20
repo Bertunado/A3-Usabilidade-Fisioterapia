@@ -1,158 +1,146 @@
 const express = require('express');
 const { db } = require('../db');
+const { toPatient, toAppointment, toEvolution } = require('../mappers');
+const { onlyDigits, toISODate, isValidDateISO, validatePatient, validateAppointment } = require('../../assets/js/shared');
 
 const router = express.Router();
 
-function getPatientWithHistory(patientId) {
-  const patient = db.prepare('SELECT * FROM patients WHERE id = ?').get(patientId);
+function findPatient(id) {
+  return toPatient(db.prepare('SELECT * FROM patients WHERE id = ?').get(id));
+}
 
-  if (!patient) return null;
-
-  const evolutions = db
-    .prepare('SELECT * FROM evolutions WHERE patient_id = ? ORDER BY created_at DESC')
-    .all(patientId);
-
-  return {
-    ...patient,
-    history: evolutions
-  };
+function cpfTaken(cpf, exceptId = 0) {
+  return Boolean(db.prepare('SELECT id FROM patients WHERE cpf = ? AND id != ?').get(cpf, exceptId));
 }
 
 router.get('/patients', (req, res) => {
-  const patients = db.prepare('SELECT * FROM patients ORDER BY time ASC').all();
+  const q = String(req.query.q || '').trim().toLowerCase();
+  const from = isValidDateISO(req.query.from) ? req.query.from : toISODate();
 
-  const result = patients.map(patient => ({
-    ...patient,
-    history: db
-      .prepare('SELECT * FROM evolutions WHERE patient_id = ? ORDER BY created_at DESC')
-      .all(patient.id)
+  const rows = db.prepare(`
+    SELECT p.*,
+      (SELECT COUNT(*) FROM evolutions e WHERE e.patient_id = p.id) AS evolution_count,
+      (SELECT a.date || ' ' || a.time FROM appointments a
+        WHERE a.patient_id = p.id AND a.date >= ? AND a.status IN ('pending', 'attending')
+        ORDER BY a.date, a.time LIMIT 1) AS next_appointment,
+      (SELECT a.date FROM appointments a
+        WHERE a.patient_id = p.id AND a.status = 'completed'
+        ORDER BY a.date DESC, a.time DESC LIMIT 1) AS last_visit
+    FROM patients p
+    ORDER BY p.name COLLATE NOCASE ASC
+  `).all(from);
+
+  const digits = onlyDigits(q);
+  const filtered = q
+    ? rows.filter(r => r.name.toLowerCase().includes(q) || (digits && onlyDigits(r.cpf).includes(digits)))
+    : rows;
+
+  return res.json(filtered.map(r => {
+    const [date, time] = r.next_appointment ? r.next_appointment.split(' ') : [];
+    return {
+      ...toPatient(r),
+      evolutionCount: r.evolution_count,
+      nextAppointment: date ? { date, time } : null,
+      lastVisit: r.last_visit
+    };
   }));
-
-  return res.json(result);
 });
 
 router.get('/patients/:id', (req, res) => {
-  const patient = getPatientWithHistory(Number(req.params.id));
+  const patient = findPatient(Number(req.params.id));
 
   if (!patient) {
     return res.status(404).json({ message: 'Paciente não encontrado.' });
   }
 
-  return res.json(patient);
+  const appointments = db
+    .prepare('SELECT * FROM appointments WHERE patient_id = ? ORDER BY date DESC, time DESC')
+    .all(patient.id)
+    .map(toAppointment);
+
+  const evolutions = db.prepare(`
+    SELECT e.*, a.date AS appt_date, a.time AS appt_time
+    FROM evolutions e
+    INNER JOIN appointments a ON a.id = e.appointment_id
+    WHERE e.patient_id = ?
+    ORDER BY a.date DESC, a.time DESC
+  `).all(patient.id).map(r => ({ ...toEvolution(r), appointment: { date: r.appt_date, time: r.appt_time } }));
+
+  return res.json({ patient, appointments, evolutions });
 });
 
 router.post('/patients', (req, res) => {
-  const { name, cpf, age, time, specialty, status = 'pending', history = '' } = req.body;
+  const result = validatePatient(req.body);
 
-  if (!name || !cpf || !age || !time || !specialty) {
-    return res.status(400).json({ message: 'Campos obrigatórios: nome, cpf, idade, horário e especialidade.' });
+  if (!result.ok) {
+    return res.status(400).json({ message: result.message, field: result.field });
   }
 
-  const existing = db.prepare('SELECT id FROM patients WHERE cpf = ?').get(cpf);
-
-  if (existing) {
-    return res.status(409).json({ message: 'Já existe um paciente com este CPF.' });
+  let appointmentData = null;
+  if (req.body.appointment) {
+    const appt = validateAppointment(req.body.appointment);
+    if (!appt.ok) {
+      return res.status(400).json({ message: appt.message, field: appt.field });
+    }
+    appointmentData = appt.value;
   }
 
-  const result = db.prepare(`
-    INSERT INTO patients (name, cpf, age, time, specialty, status, history)
-    VALUES (@name, @cpf, @age, @time, @specialty, @status, @history)
-  `).run({
-    name,
-    cpf,
-    age: Number(age),
-    time,
-    specialty,
-    status,
-    history
-  });
+  const data = result.value;
 
-  const patient = db.prepare('SELECT * FROM patients WHERE id = ?').get(result.lastInsertRowid);
+  if (cpfTaken(data.cpf)) {
+    return res.status(409).json({ message: 'Já existe um paciente cadastrado com este CPF.', field: 'cpf' });
+  }
 
-  return res.status(201).json({ message: 'Paciente cadastrado com sucesso.', patient });
+  const now = new Date().toISOString();
+
+  const created = db.transaction(() => {
+    const info = db.prepare(`
+      INSERT INTO patients (name, cpf, age, phone, specialty, diagnosis, history, created_by, created_at, updated_at)
+      VALUES (@name, @cpf, @age, @phone, @specialty, @diagnosis, @history, @createdBy, @now, @now)
+    `).run({ ...data, createdBy: req.user.id, now });
+
+    let appointment = null;
+    if (appointmentData) {
+      const apptInfo = db.prepare(`
+        INSERT INTO appointments (patient_id, date, time, status, created_at, updated_at)
+        VALUES (?, ?, ?, 'pending', ?, ?)
+      `).run(info.lastInsertRowid, appointmentData.date, appointmentData.time, now, now);
+      appointment = toAppointment(db.prepare('SELECT * FROM appointments WHERE id = ?').get(apptInfo.lastInsertRowid));
+    }
+
+    return { patient: findPatient(info.lastInsertRowid), appointment };
+  })();
+
+  return res.status(201).json({ message: 'Paciente cadastrado com sucesso.', ...created });
 });
 
-router.patch('/patients/:id/status', (req, res) => {
-  const { status } = req.body;
+router.put('/patients/:id', (req, res) => {
+  const id = Number(req.params.id);
 
-  if (!status) {
-    return res.status(400).json({ message: 'Status obrigatório.' });
-  }
-
-  const patient = db.prepare('SELECT * FROM patients WHERE id = ?').get(Number(req.params.id));
-
-  if (!patient) {
+  if (!findPatient(id)) {
     return res.status(404).json({ message: 'Paciente não encontrado.' });
   }
 
-  db.prepare('UPDATE patients SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, Number(req.params.id));
+  const result = validatePatient(req.body);
 
-  return res.json({ message: 'Status atualizado.', patient: getPatientWithHistory(Number(req.params.id)) });
-});
-
-router.post('/patients/:id/evolutions', (req, res) => {
-  const patientId = Number(req.params.id);
-  const { studentName, eva, subjective, objective, conduct, plan } = req.body;
-
-  const patient = db.prepare('SELECT * FROM patients WHERE id = ?').get(patientId);
-
-  if (!patient) {
-    return res.status(404).json({ message: 'Paciente não encontrado.' });
+  if (!result.ok) {
+    return res.status(400).json({ message: result.message, field: result.field });
   }
 
-  if (!studentName || !subjective || !conduct) {
-    return res.status(400).json({ message: 'Dados obrigatórios: nome do aluno, subjetivo e conduta.' });
+  const data = result.value;
+
+  if (cpfTaken(data.cpf, id)) {
+    return res.status(409).json({ message: 'Já existe outro paciente com este CPF.', field: 'cpf' });
   }
 
-  const result = db.prepare(`
-    INSERT INTO evolutions (patient_id, student_name, eva, subjective, objective, conduct, plan)
-    VALUES (@patient_id, @student_name, @eva, @subjective, @objective, @conduct, @plan)
-  `).run({
-    patient_id: patientId,
-    student_name: studentName,
-    eva: eva ?? null,
-    subjective,
-    objective: objective ?? '',
-    conduct,
-    plan: plan ?? ''
-  });
+  db.prepare(`
+    UPDATE patients
+    SET name = @name, cpf = @cpf, age = @age, phone = @phone, specialty = @specialty,
+        diagnosis = @diagnosis, history = @history, updated_at = @now
+    WHERE id = @id
+  `).run({ ...data, id, now: new Date().toISOString() });
 
-  db.prepare('UPDATE patients SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run('completed', patientId);
-
-  const evolution = db.prepare('SELECT * FROM evolutions WHERE id = ?').get(result.lastInsertRowid);
-
-  return res.status(201).json({ message: 'Evolução registrada com sucesso.', evolution });
-});
-
-router.get('/evolutions/pending', (req, res) => {
-  const rows = db.prepare(`
-    SELECT e.*, p.name as patient_name, p.cpf, p.specialty
-    FROM evolutions e
-    INNER JOIN patients p ON p.id = e.patient_id
-    WHERE e.teacher_approval = 'Pendente de Validação'
-    ORDER BY e.created_at DESC
-  `).all();
-
-  return res.json(rows);
-});
-
-router.patch('/evolutions/:id/approve', (req, res) => {
-  const { teacherName } = req.body;
-  const evolutionId = Number(req.params.id);
-
-  const evolution = db.prepare('SELECT * FROM evolutions WHERE id = ?').get(evolutionId);
-
-  if (!evolution) {
-    return res.status(404).json({ message: 'Evolução não encontrada.' });
-  }
-
-  const approvalText = teacherName
-    ? `Aprovado por ${teacherName}`
-    : 'Aprovado';
-
-  db.prepare('UPDATE evolutions SET teacher_approval = ? WHERE id = ?').run(approvalText, evolutionId);
-
-  return res.json({ message: 'Evolução aprovada.', evolution: { ...evolution, teacher_approval: approvalText } });
+  return res.json({ message: 'Cadastro atualizado.', patient: findPatient(id) });
 });
 
 module.exports = router;
