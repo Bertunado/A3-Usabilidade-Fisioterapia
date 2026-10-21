@@ -785,6 +785,9 @@ function agendaRow(item) {
         chips += `<span class="text-[10px] text-blue-600 font-medium">por ${esc(item.studentId === me ? 'você' : item.studentName)}</span>`;
     }
     if (evo) chips += badge(EVO_STATUS[evo.status], EVO_STATUS[evo.status].short);
+    if (evo && evo.status === 'correction' && evo.studentId !== me && item.studentName) {
+        chips += `<span class="text-[10px] text-orange-600 font-medium"><i class="fa-solid fa-user-pen mr-1"></i>aguardando correção de ${esc(item.studentName)}</span>`;
+    }
     if (hasDraft) {
         chips += '<span class="px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold border bg-slate-100 text-slate-600 border-slate-200"><i class="fa-regular fa-floppy-disk mr-1"></i>Rascunho</span>';
     }
@@ -1687,6 +1690,7 @@ function renderEvolutionView({ evolution: e, patient, appointment }, focusFeedba
     const isTeacher = state.user.role === 'teacher';
     const canReview = isTeacher && e.status === 'pending';
     const canFix = !isTeacher && e.status === 'correction' && e.studentId === state.user.id;
+    const otherAuthor = !isTeacher && e.status === 'correction' && e.studentId !== state.user.id;
 
     $('evoview-title').querySelector('span').innerText = `Evolução — ${patient.name}`;
     $('evoview-subtitle').innerText = `Sessão de ${formatDate(appointment.date)} às ${appointment.time} • Estagiário: ${e.studentName}`;
@@ -1719,6 +1723,7 @@ function renderEvolutionView({ evolution: e, patient, appointment }, focusFeedba
         </div>
         <p class="text-xs text-slate-500"><strong class="text-slate-600">Paciente:</strong> ${esc(patient.name)} • ${patient.age} anos • ${esc(specialtyLabel(patient))}</p>
         ${feedbackBox}
+        ${otherAuthor ? `<p class="text-xs text-slate-500"><i class="fa-solid fa-circle-info mr-1 text-orange-500"></i>Somente <strong>${esc(e.studentName)}</strong>, autor(a) desta evolução, pode corrigi-la e reenviar ao professor.</p>` : ''}
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
             ${vital('EVA (Dor)', `${e.eva} / 10`)}
             ${vital('PA', e.pa, 'mmHg')}
