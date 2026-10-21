@@ -232,7 +232,8 @@ function openModal(id) {
     // No celular não foca automaticamente para não abrir o teclado por cima do formulário
     if (window.matchMedia('(min-width: 640px)').matches) {
         const target = modal.querySelector('[data-autofocus]') || modal.querySelector('input:not(.sr-only):not([type=hidden]), textarea, select');
-        if (target) setTimeout(() => target.focus(), 30);
+        // Só posiciona o cursor se o usuário ainda não clicou/digitou em algum campo do modal
+        if (target) setTimeout(() => { if (!modal.contains(document.activeElement)) target.focus(); }, 30);
     }
 }
 
