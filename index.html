@@ -412,15 +412,27 @@
                         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
                                 <label for="soap-pa" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Pressão Arterial (PA)</label>
-                                <input type="text" id="soap-pa" inputmode="numeric" placeholder="Ex: 120/80 mmHg" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                                <div class="relative">
+                                    <input type="text" id="soap-pa" data-mask="pa" inputmode="numeric" autocomplete="off" placeholder="Ex: 120/80" aria-describedby="soap-pa-hint" class="w-full p-3 pr-16 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                                    <span class="absolute inset-y-0 right-3 flex items-center text-xs font-semibold text-slate-400 pointer-events-none">mmHg</span>
+                                </div>
+                                <p id="soap-pa-hint" class="text-[10px] text-slate-400 mt-1">Sistólica 60–260 / diastólica 30–160</p>
                             </div>
                             <div>
                                 <label for="soap-fc" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Frequência Cardíaca (FC)</label>
-                                <input type="text" id="soap-fc" inputmode="numeric" placeholder="Ex: 75 bpm" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                                <div class="relative">
+                                    <input type="text" id="soap-fc" data-mask="digits" data-max="3" inputmode="numeric" autocomplete="off" placeholder="Ex: 75" aria-describedby="soap-fc-hint" class="w-full p-3 pr-12 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                                    <span class="absolute inset-y-0 right-3 flex items-center text-xs font-semibold text-slate-400 pointer-events-none">bpm</span>
+                                </div>
+                                <p id="soap-fc-hint" class="text-[10px] text-slate-400 mt-1">De 30 a 220 bpm</p>
                             </div>
                             <div>
                                 <label for="soap-spo2" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Saturação SpO2</label>
-                                <input type="text" id="soap-spo2" inputmode="numeric" placeholder="Ex: 98%" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                                <div class="relative">
+                                    <input type="text" id="soap-spo2" data-mask="digits" data-max="3" inputmode="numeric" autocomplete="off" placeholder="Ex: 98" aria-describedby="soap-spo2-hint" class="w-full p-3 pr-9 bg-slate-50 border border-slate-300 rounded-xl text-xs sm:text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                                    <span class="absolute inset-y-0 right-3 flex items-center text-xs font-semibold text-slate-400 pointer-events-none">%</span>
+                                </div>
+                                <p id="soap-spo2-hint" class="text-[10px] text-slate-400 mt-1">De 50% a 100%</p>
                             </div>
                         </div>
 

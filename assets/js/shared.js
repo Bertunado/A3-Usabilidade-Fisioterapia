@@ -18,6 +18,14 @@
 
   const MAX_TEXT = 5000;
 
+  // Limites fisiológicos aceitos nos sinais vitais (valores fora disso são erro de digitação)
+  const VITAL_LIMITS = {
+    paSys: [60, 260],  // mmHg
+    paDia: [30, 160],  // mmHg
+    fc: [30, 220],     // bpm
+    spo2: [50, 100]    // %
+  };
+
   // ---------- utilidades ----------
 
   function ok(value) {
@@ -75,6 +83,14 @@
     if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
     if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
     return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  }
+
+  // Pressão arterial enquanto digita: a barra entra sozinha. A sistólica tem 3 dígitos
+  // quando começa com 1 ou 2 (100 a 260) e 2 dígitos nos demais casos (60 a 99).
+  function formatPressure(value) {
+    const d = onlyDigits(value).slice(0, 6);
+    const sysLength = /^[12]/.test(d) ? 3 : 2;
+    return d.length > sysLength ? `${d.slice(0, sysLength)}/${d.slice(sysLength)}` : d;
   }
 
   // ---------- datas ----------
@@ -189,25 +205,34 @@
     const subjective = clean(input.subjective);
     if (subjective.length < 3) error('Preencha o relato subjetivo do paciente (aba S).', 'subjective');
 
+    const within = (value, [min, max]) => value >= min && value <= max;
+
     let pa = clean(input.pa, 30);
     if (pa) {
-      const match = pa.match(/(\d{2,3})\s*[/xX]\s*(\d{2,3})/);
-      if (match) pa = `${match[1]}/${match[2]}`;
-      else error('Pressão arterial inválida. Use o formato 120/80.', 'pa');
+      const match = pa.replace(/mmhg/i, '').trim().match(/^(\d{2,3})\s*[/xX]\s*(\d{2,3})$/);
+      const sys = match ? Number(match[1]) : 0;
+      const dia = match ? Number(match[2]) : 0;
+      if (!match) {
+        error('Pressão arterial inválida. Use o formato 120/80.', 'pa');
+      } else if (!within(sys, VITAL_LIMITS.paSys) || !within(dia, VITAL_LIMITS.paDia) || dia >= sys) {
+        error('Pressão arterial fora dos limites: sistólica de 60 a 260 e diastólica de 30 a 160 mmHg, com a sistólica maior que a diastólica.', 'pa');
+      } else {
+        pa = `${sys}/${dia}`;
+      }
     }
 
     let fc = clean(input.fc, 20);
     if (fc) {
       const value = Number((fc.match(/\d+/) || [])[0]);
-      if (value >= 20 && value <= 250) fc = String(value);
-      else error('Frequência cardíaca inválida (20 a 250 bpm).', 'fc');
+      if (within(value, VITAL_LIMITS.fc)) fc = String(value);
+      else error('Frequência cardíaca fora dos limites: informe de 30 a 220 bpm.', 'fc');
     }
 
     let spo2 = clean(input.spo2, 20);
     if (spo2) {
       const value = Number((spo2.match(/\d+/) || [])[0]);
-      if (value >= 50 && value <= 100) spo2 = String(value);
-      else error('Saturação inválida (50% a 100%).', 'spo2');
+      if (within(value, VITAL_LIMITS.spo2)) spo2 = String(value);
+      else error('Saturação (SpO2) fora dos limites: informe de 50% a 100%.', 'spo2');
     }
 
     const procedures = Array.isArray(input.procedures)
@@ -388,6 +413,8 @@
     isValidCPF,
     formatCPF,
     formatPhone,
+    formatPressure,
+    VITAL_LIMITS,
     toISODate,
     parseISODate,
     addDays,

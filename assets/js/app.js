@@ -1912,6 +1912,8 @@ function bindGlobalEvents() {
         if (target.classList.contains('field-invalid')) target.classList.remove('field-invalid');
         if (target.dataset.mask === 'cpf') target.value = S.formatCPF(target.value);
         if (target.dataset.mask === 'phone') target.value = S.formatPhone(target.value);
+        if (target.dataset.mask === 'pa') target.value = S.formatPressure(target.value);
+        if (target.dataset.mask === 'digits') target.value = S.onlyDigits(target.value).slice(0, Number(target.dataset.max) || undefined);
     });
 
     $('evolution-form').addEventListener('input', scheduleDraftSave);
