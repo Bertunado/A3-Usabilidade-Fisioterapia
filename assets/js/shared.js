@@ -18,6 +18,10 @@
 
   const MAX_TEXT = 5000;
 
+  // Conta do administrador (painel master). A senha não fica no código: cada backend
+  // guarda apenas o hash dela (src/db.js e assets/js/local-backend.js).
+  const ADMIN_ACCOUNT = { name: 'Administrador', email: 'admin@physioedu.com', role: 'admin', matricula: 'ADMIN' };
+
   // Limites fisiológicos aceitos nos sinais vitais (valores fora disso são erro de digitação)
   const VITAL_LIMITS = {
     paSys: [60, 260],  // mmHg
@@ -131,12 +135,20 @@
     return clean(value, 30).toUpperCase();
   }
 
-  function validateRegistration(input) {
-    const name = clean(input.name, 120);
-    if (name.length < 3) return fail('Informe seu nome completo.', 'name');
+  function validatePassword(value) {
+    const password = String(value ?? '');
+    if (password.length < 6) return fail('A senha deve ter pelo menos 6 caracteres.', 'password');
+    if (password.length > 72) return fail('A senha pode ter no máximo 72 caracteres.', 'password');
+    return ok(password);
+  }
 
+  // Dados de um estudante/professor cadastrado pelo administrador (sem a senha)
+  function validateUserUpdate(input) {
     const role = input.role;
     if (!ROLES.includes(role)) return fail('Selecione o perfil: Estudante ou Professor.', 'role');
+
+    const name = clean(input.name, 120);
+    if (name.length < 3) return fail('Informe o nome completo.', 'name');
 
     const matricula = normalizeMatricula(input.matricula);
     if (!/^[A-Z0-9-]{4,20}$/.test(matricula)) {
@@ -146,10 +158,16 @@
     const email = clean(input.email, 120).toLowerCase();
     if (!isValidEmail(email)) return fail('Informe um e-mail válido.', 'email');
 
-    const password = String(input.password ?? '');
-    if (password.length < 6) return fail('A senha deve ter pelo menos 6 caracteres.', 'password');
+    return ok({ name, role, matricula, email });
+  }
 
-    return ok({ name, role, matricula, email, password });
+  // Novo estudante/professor: dados + senha provisória
+  function validateRegistration(input) {
+    const data = validateUserUpdate(input);
+    if (!data.ok) return data;
+    const password = validatePassword(input.password);
+    if (!password.ok) return password;
+    return ok({ ...data.value, password: password.value });
   }
 
   function validatePatient(input) {
@@ -422,7 +440,10 @@
     isValidTime,
     isValidEmail,
     normalizeMatricula,
+    validatePassword,
+    validateUserUpdate,
     validateRegistration,
+    ADMIN_ACCOUNT,
     validatePatient,
     validateAppointment,
     validateEvolution,

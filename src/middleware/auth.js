@@ -16,9 +16,12 @@ function requireAuth(req, res, next) {
     WHERE s.token = ?
   `).get(token);
 
-  if (!row || row.expires_at < new Date().toISOString()) {
+  if (!row || row.expires_at < new Date().toISOString() || !row.active) {
     db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
-    return res.status(401).json({ message: 'Sessão expirada. Faça login novamente.' });
+    const message = row && !row.active
+      ? 'Seu acesso foi desativado. Procure a coordenação do curso.'
+      : 'Sessão expirada. Faça login novamente.';
+    return res.status(401).json({ message });
   }
 
   req.user = toUser(row);
@@ -26,10 +29,12 @@ function requireAuth(req, res, next) {
   return next();
 }
 
-function requireRole(role) {
+const ROLE_NAMES = { student: 'estudantes', teacher: 'professores', admin: 'administradores' };
+
+function requireRole(...roles) {
   return (req, res, next) => {
-    if (req.user.role !== role) {
-      const who = role === 'teacher' ? 'professores' : 'estudantes';
+    if (!roles.includes(req.user.role)) {
+      const who = roles.map(r => ROLE_NAMES[r]).join(' e ');
       return res.status(403).json({ message: `Apenas ${who} podem realizar esta ação.` });
     }
     return next();

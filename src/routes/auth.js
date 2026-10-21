@@ -4,11 +4,31 @@ const bcrypt = require('bcryptjs');
 const { db } = require('../db');
 const { toUser } = require('../mappers');
 const { requireAuth } = require('../middleware/auth');
-const { normalizeMatricula, validateRegistration } = require('../../assets/js/shared');
+const { normalizeMatricula, validatePassword } = require('../../assets/js/shared');
 
 const router = express.Router();
 
 const SESSION_DAYS = 7;
+
+// Bloqueio simples contra tentativas repetidas de senha (por IP + matrícula)
+const MAX_ATTEMPTS = 8;
+const BLOCK_MINUTES = 15;
+const failedLogins = new Map();
+
+function isBlocked(key) {
+  const entry = failedLogins.get(key);
+  return Boolean(entry && entry.until > Date.now());
+}
+
+function registerFailure(key) {
+  const entry = failedLogins.get(key) || { count: 0, until: 0 };
+  entry.count += 1;
+  if (entry.count >= MAX_ATTEMPTS) {
+    entry.count = 0;
+    entry.until = Date.now() + BLOCK_MINUTES * 60 * 1000;
+  }
+  failedLogins.set(key, entry);
+}
 
 function createSession(userId) {
   const token = crypto.randomBytes(32).toString('hex');
@@ -29,16 +49,31 @@ router.post('/login', (req, res) => {
     return res.status(400).json({ message: 'Informe a matrícula e a senha.' });
   }
 
+  const attemptKey = `${req.ip}|${matricula}`;
+  if (isBlocked(attemptKey)) {
+    return res.status(429).json({ message: `Muitas tentativas de login. Aguarde ${BLOCK_MINUTES} minutos e tente novamente.` });
+  }
+
   const user = db.prepare('SELECT * FROM users WHERE matricula = ?').get(matricula);
 
   if (!user || !bcrypt.compareSync(String(password), user.password_hash)) {
+    registerFailure(attemptKey);
     return res.status(401).json({ message: 'Matrícula ou senha incorretas.' });
   }
 
-  if (role && user.role !== role) {
+  failedLogins.delete(attemptKey);
+
+  if (!user.active) {
+    return res.status(403).json({ message: 'Seu acesso está desativado. Procure a coordenação do curso.' });
+  }
+
+  // O administrador entra por qualquer uma das abas de perfil
+  if (role && user.role !== role && user.role !== 'admin') {
     const profile = user.role === 'teacher' ? 'Professor' : 'Estudante';
     return res.status(403).json({ message: `Esta matrícula pertence ao perfil ${profile}. Selecione o perfil correto acima.` });
   }
+
+  db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(new Date().toISOString(), user.id);
 
   return res.json({
     message: 'Login realizado com sucesso.',
@@ -47,67 +82,46 @@ router.post('/login', (req, res) => {
   });
 });
 
-router.post('/register', (req, res) => {
-  const result = validateRegistration(req.body);
-
-  if (!result.ok) {
-    return res.status(400).json({ message: result.message, field: result.field });
-  }
-
-  const { name, role, matricula, email, password } = result.value;
-
-  if (db.prepare('SELECT id FROM users WHERE matricula = ?').get(matricula)) {
-    return res.status(409).json({ message: 'Já existe um usuário com essa matrícula.', field: 'matricula' });
-  }
-
-  const info = db.prepare(`
-    INSERT INTO users (name, email, role, matricula, password_hash, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(name, email, role, matricula, bcrypt.hashSync(password, 10), new Date().toISOString());
-
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(info.lastInsertRowid);
-
-  return res.status(201).json({
-    message: 'Conta criada com sucesso.',
-    token: createSession(user.id),
-    user: toUser(user)
-  });
+router.get('/me', requireAuth, (req, res) => {
+  return res.json({ user: req.user });
 });
 
-router.post('/reset-password', (req, res) => {
-  const matricula = normalizeMatricula(req.body.matricula);
-  const email = String(req.body.email || '').trim().toLowerCase();
-  const newPassword = String(req.body.newPassword || '');
+router.post('/change-password', requireAuth, (req, res) => {
+  const { currentPassword } = req.body;
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
 
-  if (!matricula || !email) {
-    return res.status(400).json({ message: 'Informe a matrícula e o e-mail cadastrado.' });
+  if (!bcrypt.compareSync(String(currentPassword || ''), user.password_hash)) {
+    return res.status(400).json({ message: 'A senha atual está incorreta.', field: 'currentPassword' });
   }
 
-  if (newPassword.length < 6) {
-    return res.status(400).json({ message: 'A nova senha deve ter pelo menos 6 caracteres.', field: 'password' });
+  const result = validatePassword(req.body.newPassword);
+  if (!result.ok) {
+    return res.status(400).json({ message: result.message, field: 'newPassword' });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE matricula = ? AND lower(email) = ?').get(matricula, email);
-
-  if (!user) {
-    return res.status(400).json({ message: 'Matrícula e e-mail não conferem com nenhum cadastro.' });
+  if (result.value === String(currentPassword)) {
+    return res.status(400).json({ message: 'A nova senha precisa ser diferente da atual.', field: 'newPassword' });
   }
 
   db.transaction(() => {
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(bcrypt.hashSync(newPassword, 10), user.id);
-    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(user.id);
+    db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?')
+      .run(bcrypt.hashSync(result.value, 10), user.id);
+    // Encerra as sessões em outros dispositivos; mantém a atual
+    db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(user.id, req.token);
   })();
 
-  return res.json({ message: 'Senha redefinida. Faça login com a nova senha.' });
-});
-
-router.get('/me', requireAuth, (req, res) => {
-  return res.json({ user: req.user });
+  return res.json({
+    message: 'Senha alterada com sucesso.',
+    user: toUser(db.prepare('SELECT * FROM users WHERE id = ?').get(user.id))
+  });
 });
 
 router.post('/logout', requireAuth, (req, res) => {
   db.prepare('DELETE FROM sessions WHERE token = ?').run(req.token);
   return res.json({ message: 'Sessão encerrada.' });
 });
+
+// Cadastro e redefinição de senha agora são feitos pelo administrador
+router.use((req, res) => res.status(404).json({ message: 'Rota não encontrada.' }));
 
 module.exports = router;

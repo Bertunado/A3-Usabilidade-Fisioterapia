@@ -2,9 +2,16 @@ const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
-const { buildSeed } = require('../assets/js/shared');
+const { buildSeed, ADMIN_ACCOUNT } = require('../assets/js/shared');
 
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
+
+// Hash bcrypt da senha padrão do administrador (a senha em si não fica no código).
+// Para usar outra senha na criação do admin, defina a variável ADMIN_PASSWORD.
+const ADMIN_PASSWORD_HASH = '$2a$10$HEoO4OSsPOKvaV58Mi1s7uWunOJohaBlwNpjtLRpT3Tr4fWrA0.c2';
+
+// Pacientes, agendamentos e contas de exemplo. Em produção use DEMO_DATA=false.
+const DEMO_DATA = process.env.DEMO_DATA !== 'false';
 
 const dbDir = path.join(__dirname, '..', 'database');
 if (!fs.existsSync(dbDir)) {
@@ -16,17 +23,26 @@ const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
-function createSchema() {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
+function usersTableSql(name) {
+  return `
+    CREATE TABLE IF NOT EXISTS ${name} (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       email TEXT NOT NULL,
-      role TEXT NOT NULL CHECK(role IN ('student', 'teacher')),
+      role TEXT NOT NULL CHECK(role IN ('student', 'teacher', 'admin')),
       matricula TEXT UNIQUE NOT NULL,
       password_hash TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      must_change_password INTEGER NOT NULL DEFAULT 0,
+      last_login_at TEXT,
       created_at TEXT NOT NULL
     );
+  `;
+}
+
+function createSchema() {
+  db.exec(`
+    ${usersTableSql('users')}
 
     CREATE TABLE IF NOT EXISTS sessions (
       token TEXT PRIMARY KEY,
@@ -95,22 +111,55 @@ function migrate() {
   const version = db.pragma('user_version', { simple: true });
   if (version >= SCHEMA_VERSION) return;
 
-  // A versão 1 (protótipo) tinha outro formato de tabelas e nenhum dado real:
-  // recriamos o banco do zero no formato novo.
-  db.exec(`
-    DROP TABLE IF EXISTS evolutions;
-    DROP TABLE IF EXISTS appointments;
-    DROP TABLE IF EXISTS sessions;
-    DROP TABLE IF EXISTS patients;
-    DROP TABLE IF EXISTS users;
-  `);
-  createSchema();
+  if (version < 2) {
+    // A versão 1 (protótipo) tinha outro formato de tabelas e nenhum dado real:
+    // recriamos o banco do zero no formato novo.
+    db.exec(`
+      DROP TABLE IF EXISTS evolutions;
+      DROP TABLE IF EXISTS appointments;
+      DROP TABLE IF EXISTS sessions;
+      DROP TABLE IF EXISTS patients;
+      DROP TABLE IF EXISTS users;
+    `);
+    createSchema();
+  } else {
+    // 2 -> 3: perfil admin e controle de acesso. O SQLite não altera CHECK de uma
+    // coluna, então a tabela de usuários é recriada preservando todos os dados.
+    db.pragma('foreign_keys = OFF');
+    db.transaction(() => {
+      db.exec(`
+        ${usersTableSql('users_v3')}
+        INSERT INTO users_v3 (id, name, email, role, matricula, password_hash, created_at)
+          SELECT id, name, email, role, matricula, password_hash, created_at FROM users;
+        DROP TABLE users;
+        ALTER TABLE users_v3 RENAME TO users;
+      `);
+    })();
+    db.pragma('foreign_keys = ON');
+    console.log('Banco de dados atualizado para a versão 3 (painel administrativo).');
+  }
+
   db.pragma(`user_version = ${SCHEMA_VERSION}`);
+}
+
+function ensureAdmin() {
+  if (db.prepare("SELECT id FROM users WHERE role = 'admin'").get()) return;
+
+  const passwordHash = process.env.ADMIN_PASSWORD
+    ? bcrypt.hashSync(process.env.ADMIN_PASSWORD, 10)
+    : ADMIN_PASSWORD_HASH;
+
+  db.prepare(`
+    INSERT INTO users (name, email, role, matricula, password_hash, created_at)
+    VALUES (@name, @email, @role, @matricula, @passwordHash, @createdAt)
+  `).run({ ...ADMIN_ACCOUNT, passwordHash, createdAt: new Date().toISOString() });
+
+  console.log(`Conta de administrador criada (login: ${ADMIN_ACCOUNT.matricula.toLowerCase()}).`);
 }
 
 function seed() {
   const { count } = db.prepare('SELECT COUNT(*) AS count FROM users').get();
-  if (count > 0) return;
+  if (count > 0 || !DEMO_DATA) return;
 
   const data = buildSeed();
 
@@ -154,6 +203,7 @@ function initDatabase() {
   migrate();
   createSchema();
   seed();
+  ensureAdmin();
   db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(new Date().toISOString());
 }
 

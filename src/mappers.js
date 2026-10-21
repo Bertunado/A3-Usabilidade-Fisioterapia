@@ -7,7 +7,21 @@ function toUser(row) {
     name: row.name,
     email: row.email,
     role: row.role,
-    matricula: row.matricula
+    matricula: row.matricula,
+    mustChangePassword: Boolean(row.must_change_password)
+  };
+}
+
+// Visão do painel administrativo (inclui situação do acesso e atividade)
+function toAdminUser(row) {
+  if (!row) return null;
+  return {
+    ...toUser(row),
+    active: Boolean(row.active),
+    lastLoginAt: row.last_login_at,
+    createdAt: row.created_at,
+    evolutionCount: row.evolution_count || 0,
+    reviewCount: row.review_count || 0
   };
 }
 
@@ -70,4 +84,4 @@ function toEvolution(row) {
   };
 }
 
-module.exports = { toUser, toPatient, toAppointment, toEvolution };
+module.exports = { toUser, toAdminUser, toPatient, toAppointment, toEvolution };

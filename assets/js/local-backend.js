@@ -6,8 +6,12 @@
 (function () {
   const S = window.PhysioShared;
   const STORAGE_KEY = 'physioedu_db_v2';
-  const SCHEMA_VERSION = 2;
+  const SCHEMA_VERSION = 3;
   const SESSION_DAYS = 7;
+
+  // Hash (SHA-256 com sal) da senha padrão do administrador; a senha em si não fica no código
+  const ADMIN_SALT = 'c41668f827af8584a2888156b6193339';
+  const ADMIN_HASH = '3546041530cd475a15f3080ab596609c56e364bbbce72ac85831c5fb268ed1e5';
 
   class HttpError extends Error {
     constructor(status, message, field) {
@@ -66,13 +70,27 @@
     return Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
   }
 
+  const ACCESS_DEFAULTS = { active: true, mustChangePassword: false, lastLoginAt: null };
+
+  function addAdmin() {
+    if (db.users.some(u => u.role === 'admin')) return;
+    db.users.push({
+      id: ++db.seq.users,
+      ...S.ADMIN_ACCOUNT,
+      ...ACCESS_DEFAULTS,
+      salt: ADMIN_SALT,
+      passwordHash: ADMIN_HASH,
+      createdAt: new Date().toISOString()
+    });
+  }
+
   async function seed() {
     const data = S.buildSeed();
     const users = [];
 
     for (const { password, ...user } of data.users) {
       const salt = randomToken(8);
-      users.push({ ...user, salt, passwordHash: await hashPassword(password, salt) });
+      users.push({ ...user, ...ACCESS_DEFAULTS, salt, passwordHash: await hashPassword(password, salt) });
     }
 
     const maxId = list => list.reduce((max, r) => Math.max(max, r.id), 0);
@@ -91,12 +109,24 @@
       appointments: data.appointments,
       evolutions: data.evolutions
     };
+    addAdmin();
     save();
+  }
+
+  // 2 -> 3: perfil admin e controle de acesso, preservando os dados já cadastrados
+  function migrate() {
+    if (db.version === 2) {
+      db.users = db.users.map(u => ({ ...ACCESS_DEFAULTS, ...u }));
+      addAdmin();
+      db.version = 3;
+      save();
+    }
   }
 
   async function ensureDb() {
     // Recarrega a cada requisição para enxergar alterações feitas em outras abas
     load();
+    if (db) migrate();
     if (!db || db.version !== SCHEMA_VERSION) await seed();
   }
 
@@ -109,7 +139,25 @@
   const sortAppointments = (a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time);
 
   function publicUser(u) {
-    return { id: u.id, name: u.name, email: u.email, role: u.role, matricula: u.matricula };
+    return {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      matricula: u.matricula,
+      mustChangePassword: Boolean(u.mustChangePassword)
+    };
+  }
+
+  function adminUser(u) {
+    return {
+      ...publicUser(u),
+      active: u.active !== false,
+      lastLoginAt: u.lastLoginAt || null,
+      createdAt: u.createdAt,
+      evolutionCount: db.evolutions.filter(e => e.studentId === u.id).length,
+      reviewCount: db.evolutions.filter(e => e.reviewerId === u.id).length
+    };
   }
 
   function patientSummary(p) {
@@ -126,10 +174,11 @@
     return result.value;
   }
 
-  function requireRole(user, role) {
-    if (user.role !== role) {
-      const who = role === 'teacher' ? 'professores' : 'estudantes';
-      throw new HttpError(403, `Apenas ${who} podem realizar esta ação.`);
+  const ROLE_NAMES = { student: 'estudantes', teacher: 'professores', admin: 'administradores' };
+
+  function requireRole(user, ...roles) {
+    if (!roles.includes(user.role)) {
+      throw new HttpError(403, `Apenas ${roles.map(r => ROLE_NAMES[r]).join(' e ')} podem realizar esta ação.`);
     }
   }
 
@@ -137,12 +186,14 @@
     const session = token ? db.sessions.find(s => s.token === token) : null;
     const user = session ? byId('users', session.userId) : null;
 
-    if (!session || !user || session.expiresAt < nowISO()) {
+    if (!session || !user || session.expiresAt < nowISO() || user.active === false) {
       if (session) {
         db.sessions = db.sessions.filter(s => s !== session);
         save();
       }
-      throw new HttpError(401, 'Sessão expirada. Faça login novamente.');
+      throw new HttpError(401, user && user.active === false
+        ? 'Seu acesso foi desativado. Procure a coordenação do curso.'
+        : 'Sessão expirada. Faça login novamente.');
     }
 
     return user;
@@ -174,23 +225,73 @@
       throw new HttpError(401, 'Matrícula ou senha incorretas.');
     }
 
-    if (body.role && user.role !== body.role) {
+    if (user.active === false) {
+      throw new HttpError(403, 'Seu acesso está desativado. Procure a coordenação do curso.');
+    }
+
+    // O administrador entra por qualquer uma das abas de perfil
+    if (body.role && user.role !== body.role && user.role !== 'admin') {
       const profile = user.role === 'teacher' ? 'Professor' : 'Estudante';
       throw new HttpError(403, `Esta matrícula pertence ao perfil ${profile}. Selecione o perfil correto acima.`);
     }
 
+    user.lastLoginAt = nowISO();
     const token = createSession(user.id);
     save();
     return { message: 'Login realizado com sucesso.', token, user: publicUser(user) };
   }
 
-  async function register({ body }) {
+  async function changePassword({ body, user, token }) {
+    const currentPassword = String(body.currentPassword || '');
+    if ((await hashPassword(currentPassword, user.salt)) !== user.passwordHash) {
+      throw new HttpError(400, 'A senha atual está incorreta.', 'currentPassword');
+    }
+
+    const result = S.validatePassword(body.newPassword);
+    if (!result.ok) throw new HttpError(400, result.message, 'newPassword');
+    if (result.value === currentPassword) {
+      throw new HttpError(400, 'A nova senha precisa ser diferente da atual.', 'newPassword');
+    }
+
+    user.salt = randomToken(8);
+    user.passwordHash = await hashPassword(result.value, user.salt);
+    user.mustChangePassword = false;
+    // Encerra as sessões em outros dispositivos; mantém a atual
+    db.sessions = db.sessions.filter(s => s.userId !== user.id || s.token === token);
+    save();
+    return { message: 'Senha alterada com sucesso.', user: publicUser(user) };
+  }
+
+  function logout({ token }) {
+    db.sessions = db.sessions.filter(s => s.token !== token);
+    save();
+    return { message: 'Sessão encerrada.' };
+  }
+
+  // ---------- painel administrativo ----------
+
+  // O painel gerencia apenas estudantes e professores (a conta admin não aparece na lista)
+  function findManagedUser(id) {
+    const user = byId('users', id);
+    if (!user || user.role === 'admin') throw new HttpError(404, 'Usuário não encontrado.');
+    return user;
+  }
+
+  function listUsers() {
+    return db.users
+      .filter(u => u.role !== 'admin')
+      .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+      .map(adminUser);
+  }
+
+  async function createUser({ body }) {
     const data = check(S.validateRegistration(body));
 
     if (db.users.some(u => u.matricula === data.matricula)) {
       throw new HttpError(409, 'Já existe um usuário com essa matrícula.', 'matricula');
     }
 
+    // A senha definida pelo admin é provisória: o usuário troca no primeiro acesso
     const salt = randomToken(8);
     const user = {
       id: nextId('users'),
@@ -198,38 +299,49 @@
       email: data.email,
       role: data.role,
       matricula: data.matricula,
+      ...ACCESS_DEFAULTS,
+      mustChangePassword: true,
       salt,
       passwordHash: await hashPassword(data.password, salt),
       createdAt: nowISO()
     };
     db.users.push(user);
-    const token = createSession(user.id);
     save();
-    return { message: 'Conta criada com sucesso.', token, user: publicUser(user) };
+    return { message: 'Usuário cadastrado.', user: adminUser(user) };
   }
 
-  async function resetPassword({ body }) {
-    const matricula = S.normalizeMatricula(body.matricula);
-    const email = String(body.email || '').trim().toLowerCase();
-    const newPassword = String(body.newPassword || '');
+  function updateUser({ id, body }) {
+    const user = findManagedUser(id);
+    const data = check(S.validateUserUpdate(body));
 
-    if (!matricula || !email) throw new HttpError(400, 'Informe a matrícula e o e-mail cadastrado.');
-    if (newPassword.length < 6) throw new HttpError(400, 'A nova senha deve ter pelo menos 6 caracteres.', 'password');
+    if (db.users.some(u => u.matricula === data.matricula && u.id !== user.id)) {
+      throw new HttpError(409, 'Já existe outro usuário com essa matrícula.', 'matricula');
+    }
 
-    const user = db.users.find(u => u.matricula === matricula && u.email.toLowerCase() === email);
-    if (!user) throw new HttpError(400, 'Matrícula e e-mail não conferem com nenhum cadastro.');
+    Object.assign(user, data);
+    save();
+    return { message: 'Cadastro atualizado.', user: adminUser(user) };
+  }
+
+  async function setUserPassword({ id, body }) {
+    const user = findManagedUser(id);
+    const result = S.validatePassword(body.password);
+    if (!result.ok) throw new HttpError(400, result.message, 'password');
 
     user.salt = randomToken(8);
-    user.passwordHash = await hashPassword(newPassword, user.salt);
+    user.passwordHash = await hashPassword(result.value, user.salt);
+    user.mustChangePassword = true;
     db.sessions = db.sessions.filter(s => s.userId !== user.id);
     save();
-    return { message: 'Senha redefinida. Faça login com a nova senha.' };
+    return { message: 'Senha provisória definida.', user: adminUser(user) };
   }
 
-  function logout({ token }) {
-    db.sessions = db.sessions.filter(s => s.token !== token);
+  function setUserStatus({ id, body }) {
+    const user = findManagedUser(id);
+    user.active = Boolean(body.active);
+    if (!user.active) db.sessions = db.sessions.filter(s => s.userId !== user.id);
     save();
-    return { message: 'Sessão encerrada.' };
+    return { message: user.active ? 'Acesso reativado.' : 'Acesso desativado.', user: adminUser(user) };
   }
 
   // ---------- pacientes ----------
@@ -535,27 +647,34 @@
 
   // ---------- roteamento ----------
 
+  const ADMIN = ['admin'];
+  const CLINICAL = ['student', 'teacher'];
+
   const routes = [
     { method: 'GET', path: '/health', public: true, handler: () => ({ status: 'ok', mode: 'local' }) },
     { method: 'POST', path: '/auth/login', public: true, handler: login },
-    { method: 'POST', path: '/auth/register', public: true, handler: register },
-    { method: 'POST', path: '/auth/reset-password', public: true, handler: resetPassword },
     { method: 'GET', path: '/auth/me', handler: ({ user }) => ({ user: publicUser(user) }) },
+    { method: 'POST', path: '/auth/change-password', handler: changePassword },
     { method: 'POST', path: '/auth/logout', handler: logout },
-    { method: 'GET', path: '/patients', handler: listPatients },
-    { method: 'POST', path: '/patients', handler: createPatient },
-    { method: 'GET', path: '/patients/:id', handler: getPatient },
-    { method: 'PUT', path: '/patients/:id', handler: updatePatient },
-    { method: 'GET', path: '/appointments', handler: listAppointments },
-    { method: 'POST', path: '/appointments', handler: createAppointment },
-    { method: 'GET', path: '/appointments/:id', handler: getAppointment },
-    { method: 'PATCH', path: '/appointments/:id/status', handler: updateAppointmentStatus },
-    { method: 'DELETE', path: '/appointments/:id', handler: deleteAppointment },
-    { method: 'GET', path: '/evolutions', handler: listEvolutions },
-    { method: 'POST', path: '/evolutions', handler: createEvolution },
-    { method: 'GET', path: '/evolutions/:id', handler: getEvolution },
-    { method: 'PUT', path: '/evolutions/:id', handler: updateEvolution },
-    { method: 'PATCH', path: '/evolutions/:id/review', handler: reviewEvolution }
+    { method: 'GET', path: '/admin/users', roles: ADMIN, handler: listUsers },
+    { method: 'POST', path: '/admin/users', roles: ADMIN, handler: createUser },
+    { method: 'PUT', path: '/admin/users/:id', roles: ADMIN, handler: updateUser },
+    { method: 'POST', path: '/admin/users/:id/password', roles: ADMIN, handler: setUserPassword },
+    { method: 'PATCH', path: '/admin/users/:id/status', roles: ADMIN, handler: setUserStatus },
+    { method: 'GET', path: '/patients', roles: CLINICAL, handler: listPatients },
+    { method: 'POST', path: '/patients', roles: CLINICAL, handler: createPatient },
+    { method: 'GET', path: '/patients/:id', roles: CLINICAL, handler: getPatient },
+    { method: 'PUT', path: '/patients/:id', roles: CLINICAL, handler: updatePatient },
+    { method: 'GET', path: '/appointments', roles: CLINICAL, handler: listAppointments },
+    { method: 'POST', path: '/appointments', roles: CLINICAL, handler: createAppointment },
+    { method: 'GET', path: '/appointments/:id', roles: CLINICAL, handler: getAppointment },
+    { method: 'PATCH', path: '/appointments/:id/status', roles: CLINICAL, handler: updateAppointmentStatus },
+    { method: 'DELETE', path: '/appointments/:id', roles: CLINICAL, handler: deleteAppointment },
+    { method: 'GET', path: '/evolutions', roles: CLINICAL, handler: listEvolutions },
+    { method: 'POST', path: '/evolutions', roles: CLINICAL, handler: createEvolution },
+    { method: 'GET', path: '/evolutions/:id', roles: CLINICAL, handler: getEvolution },
+    { method: 'PUT', path: '/evolutions/:id', roles: CLINICAL, handler: updateEvolution },
+    { method: 'PATCH', path: '/evolutions/:id/review', roles: CLINICAL, handler: reviewEvolution }
   ].map(r => ({ ...r, regex: new RegExp(`^${r.path.replace(':id', '(\\d+)')}$`) }));
 
   async function dispatch(method, path, body, token) {
@@ -567,6 +686,7 @@
 
     const [, id] = url.pathname.match(route.regex);
     const user = route.public ? null : authenticate(token);
+    if (route.roles) requireRole(user, ...route.roles);
 
     const result = await route.handler({
       id: id ? Number(id) : null,

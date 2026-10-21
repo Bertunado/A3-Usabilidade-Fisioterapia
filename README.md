@@ -1,6 +1,6 @@
 # PhysioEdu — Gestão de Estágio & Prontuário Eletrônico
 
-Sistema para clínicas-escola de Fisioterapia: o **estudante** atende os pacientes da agenda e registra a evolução no formato SOAP; o **professor orientador** revisa, aprova ou pede correção.
+Sistema para clínicas-escola de Fisioterapia: o **estudante** atende os pacientes da agenda e registra a evolução no formato SOAP; o **professor orientador** revisa, aprova ou pede correção; o **administrador** cadastra estudantes e professores e controla o acesso.
 
 ## Como usar
 
@@ -29,6 +29,20 @@ Para usar o site do GitHub Pages com um backend hospedado (Render, Railway, VPS.
 <script>window.PHYSIOEDU_API_URL = 'https://minha-api.exemplo.com/';</script>
 ```
 
+## Configuração do servidor
+
+Variáveis de ambiente opcionais do `npm start`:
+
+| Variável | Para que serve |
+|---|---|
+| `PORT` | Porta do servidor (padrão `3000`) |
+| `DB_PATH` | Caminho do arquivo SQLite (padrão `database/physioedu.db`) |
+| `DEMO_DATA=false` | Não cria pacientes e contas de exemplo; o banco começa só com o administrador |
+| `ADMIN_PASSWORD` | Senha do administrador, usada apenas quando a conta admin é criada pela primeira vez |
+| `TRUST_PROXY=1` | Use quando o servidor estiver atrás de um proxy reverso (Nginx, Caddy), para o bloqueio de tentativas de login usar o IP real |
+
+O login bloqueia por 15 minutos a combinação IP + matrícula após 8 senhas erradas seguidas.
+
 ## Contas cadastradas
 
 | Perfil     | Matrícula   | Senha  |
@@ -38,7 +52,9 @@ Para usar o site do GitHub Pages com um backend hospedado (Render, Railway, VPS.
 | Professor  | `DOC-88392` | 123456 |
 | Professor  | `DOC-77120` | 123456 |
 
-Também é possível criar uma conta pela tela de login ("Criar conta") e redefinir a senha em "Esqueceu a senha?" (matrícula + e-mail cadastrado).
+O **administrador** entra com o login `admin` (por qualquer aba da tela de login). A senha padrão é repassada pelo responsável do projeto e não fica registrada no código: o sistema guarda apenas o hash dela.
+
+Não há cadastro público. Novos estudantes e professores são criados no painel administrativo com uma **senha provisória**, que o usuário troca obrigatoriamente no primeiro acesso. Em caso de esquecimento, o administrador define uma nova senha provisória.
 
 ## Funcionalidades
 
@@ -49,6 +65,14 @@ Também é possível criar uma conta pela tela de login ("Criar conta") e redefi
 - Registro de falta com "Desfazer", sessões desmarcadas, retorno e reagendamento.
 - Prontuário do paciente: dados, anamnese, próximas sessões e todas as evoluções.
 - Aviso das evoluções com correção solicitada, com a edição e o reenvio para validação.
+
+**Administrador**
+- Cadastro de estudantes e professores com senha provisória (gerada automaticamente ou digitada).
+- Edição de dados, redefinição de senha e desativação/reativação do acesso, sem apagar o histórico de atendimentos.
+- Lista com busca, filtros por perfil e indicação de último acesso e de senha provisória pendente.
+
+**Todos os perfis**
+- Troca da própria senha pelo ícone de chave no cabeçalho.
 
 **Professor**
 - Painel com evoluções pendentes, em correção e aprovadas, com filtros e busca.
@@ -65,20 +89,23 @@ assets/js/api.js           Cliente da API: detecta o modo e envia as requisiçõ
 assets/js/app.js           Lógica das telas
 server.js                  Servidor Express (API + arquivos da página)
 src/db.js                  Esquema SQLite e dados iniciais
-src/routes/*.js            Rotas: auth, patients, appointments, evolutions
+src/routes/*.js            Rotas: auth, admin, patients, appointments, evolutions
 ```
 
 ## API
 
-Todas as rotas, exceto as de autenticação, exigem o cabeçalho `Authorization: Bearer <token>`, devolvido no login.
+Todas as rotas, exceto o login, exigem o cabeçalho `Authorization: Bearer <token>`, devolvido no login. As rotas clínicas (pacientes, agenda e evoluções) são exclusivas de estudantes e professores; as de `/api/admin` são exclusivas do administrador.
 
 | Método | Rota | Descrição |
 |---|---|---|
 | POST | `/api/auth/login` | Login `{ matricula, password, role }` |
-| POST | `/api/auth/register` | Criar conta |
-| POST | `/api/auth/reset-password` | Redefinir senha `{ matricula, email, newPassword }` |
 | GET | `/api/auth/me` | Usuário da sessão |
+| POST | `/api/auth/change-password` | Trocar a própria senha `{ currentPassword, newPassword }` |
 | POST | `/api/auth/logout` | Encerrar sessão |
+| GET / POST | `/api/admin/users` | Listar / cadastrar estudante ou professor (admin) |
+| PUT | `/api/admin/users/:id` | Editar cadastro (admin) |
+| POST | `/api/admin/users/:id/password` | Definir senha provisória (admin) |
+| PATCH | `/api/admin/users/:id/status` | Ativar/desativar acesso `{ active }` (admin) |
 | GET | `/api/patients?q=` | Listar/buscar pacientes |
 | POST | `/api/patients` | Cadastrar paciente (+ 1ª sessão opcional em `appointment`) |
 | GET / PUT | `/api/patients/:id` | Prontuário completo / editar cadastro |

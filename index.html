@@ -82,7 +82,7 @@
 
 
     <header id="main-header" class="bg-white border-b border-slate-200 sticky top-0 z-30 hidden shadow-sm">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+        <div class="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-2 sm:gap-4">
             <div class="flex items-center space-x-3 cursor-pointer" onclick="navigateHome()">
                 <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-teal-400 flex items-center justify-center text-white font-bold text-xl shadow-md">
                     <i class="fa-solid fa-notes-medical"></i>
@@ -100,9 +100,12 @@
             <div class="flex items-center gap-2 sm:gap-3">
                 <div class="flex items-center gap-2 bg-slate-100 py-1.5 px-3 rounded-full text-xs font-medium text-slate-700 border border-slate-200">
                     <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                    <span id="user-display-name" class="truncate max-w-[110px] sm:max-w-none">Carregando...</span>
+                    <span id="user-display-name" class="truncate max-w-[88px] sm:max-w-none">Carregando...</span>
                     <span id="user-display-role" class="hidden sm:inline-block ml-1 bg-brand-100 text-brand-800 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase">Aluno</span>
                 </div>
+                <button onclick="openPasswordModal()" class="p-2 text-slate-400 hover:text-brand-700 hover:bg-brand-50 rounded-lg transition-colors" title="Alterar senha" aria-label="Alterar senha">
+                    <i class="fa-solid fa-key text-lg"></i>
+                </button>
                 <button onclick="handleLogout()" class="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Sair do Sistema" aria-label="Sair do Sistema">
                     <i class="fa-solid fa-right-from-bracket text-lg"></i>
                 </button>
@@ -176,7 +179,7 @@
                             <input type="checkbox" id="login-remember" checked class="rounded border-slate-300 text-brand-600 focus:ring-brand-500 mr-2 w-4 h-4">
                             Lembrar matrícula e manter conectado
                         </label>
-                        <button type="button" onclick="openResetModal()" class="text-brand-600 hover:underline shrink-0">Esqueceu a senha?</button>
+                        <button type="button" onclick="openModal('modal-forgot')" class="text-brand-600 hover:underline shrink-0">Esqueceu a senha?</button>
                     </div>
 
 
@@ -187,8 +190,7 @@
                 </form>
 
                 <p class="text-center text-xs text-slate-500 mt-4">
-                    Ainda não tem acesso?
-                    <button type="button" onclick="openRegisterModal()" class="text-brand-600 font-semibold hover:underline">Criar conta</button>
+                    Ainda não tem acesso? Solicite à coordenação do curso.
                 </p>
 
                 <div class="mt-6 pt-4 border-t border-slate-100 text-center">
@@ -584,6 +586,55 @@
         </section>
 
 
+
+
+        <!-- ================= PAINEL ADMINISTRATIVO (MASTER) ================= -->
+        <section id="screen-admin" class="hidden space-y-4 sm:space-y-6">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-sm">
+                <div>
+                    <h2 class="text-xl sm:text-2xl font-bold text-slate-800">Painel Administrativo</h2>
+                    <p class="text-xs sm:text-sm text-slate-500 mt-0.5">Cadastro e controle de acesso de estudantes e professores</p>
+                </div>
+                <button onclick="openUserModal()" class="w-full sm:w-auto bg-brand-600 hover:bg-brand-700 text-white px-4 py-3 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 shadow-sm transition active:scale-[0.98]">
+                    <i class="fa-solid fa-user-plus text-sm"></i>
+                    <span>Novo Usuário</span>
+                </button>
+            </div>
+
+            <!-- Stats (clicável para filtrar) -->
+            <div class="grid grid-cols-3 gap-2.5 sm:gap-4">
+                <button type="button" data-filter="student" onclick="setAdminFilter('student')" class="admin-stat text-left bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm transition hover:border-brand-300">
+                    <span class="text-[10px] sm:text-xs font-semibold text-brand-600 uppercase tracking-wider">Estudantes</span>
+                    <div class="text-xl sm:text-2xl font-bold text-slate-800 mt-0.5" id="astat-student">0</div>
+                </button>
+                <button type="button" data-filter="teacher" onclick="setAdminFilter('teacher')" class="admin-stat text-left bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm transition hover:border-indigo-300">
+                    <span class="text-[10px] sm:text-xs font-semibold text-indigo-600 uppercase tracking-wider">Professores</span>
+                    <div class="text-xl sm:text-2xl font-bold text-slate-800 mt-0.5" id="astat-teacher">0</div>
+                </button>
+                <button type="button" data-filter="inactive" onclick="setAdminFilter('inactive')" class="admin-stat text-left bg-white p-3.5 sm:p-4 rounded-xl border border-slate-200 shadow-sm transition hover:border-rose-300">
+                    <span class="text-[10px] sm:text-xs font-semibold text-rose-500 uppercase tracking-wider">Desativados</span>
+                    <div class="text-xl sm:text-2xl font-bold text-slate-800 mt-0.5" id="astat-inactive">0</div>
+                </button>
+            </div>
+
+            <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm">
+                <div class="p-3.5 sm:p-4 bg-slate-50/50 border-b border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+                    <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 w-full sm:w-auto overflow-x-auto no-scrollbar">
+                        <button type="button" data-filter="all" onclick="setAdminFilter('all')" class="admin-tab flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap">Todos</button>
+                        <button type="button" data-filter="student" onclick="setAdminFilter('student')" class="admin-tab flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap">Estudantes</button>
+                        <button type="button" data-filter="teacher" onclick="setAdminFilter('teacher')" class="admin-tab flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap">Professores</button>
+                        <button type="button" data-filter="inactive" onclick="setAdminFilter('inactive')" class="admin-tab flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap">Desativados</button>
+                    </div>
+                    <div class="relative w-full sm:w-72">
+                        <input type="search" id="search-users" oninput="renderAdminUsers()" placeholder="Buscar nome, matrícula ou e-mail..." class="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-xl text-xs text-slate-700 focus:ring-1 focus:ring-brand-500 focus:outline-none" aria-label="Buscar usuário">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-3 text-xs text-slate-400"></i>
+                    </div>
+                </div>
+                <div class="divide-y divide-slate-100" id="admin-users-container"></div>
+            </div>
+        </section>
+
+
     </main>
 
 
@@ -789,59 +840,61 @@
 
 
 
-    <!-- MODAL: CRIAR CONTA -->
-    <div id="modal-register" class="modal fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm hidden" role="dialog" aria-modal="true" aria-labelledby="register-title">
-        <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+    <!-- MODAL: ESQUECI A SENHA -->
+    <div id="modal-forgot" class="modal fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm hidden" role="dialog" aria-modal="true" aria-labelledby="forgot-title">
+        <div class="bg-white w-full max-w-sm rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 p-5 sm:p-6">
+            <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 bg-brand-50 text-brand-600">
+                    <i class="fa-solid fa-key text-lg"></i>
+                </div>
+                <div>
+                    <h3 id="forgot-title" class="font-bold text-slate-800 text-sm sm:text-base">Esqueceu a senha?</h3>
+                    <p class="text-xs sm:text-sm text-slate-500 mt-1">Procure a coordenação do curso. Ela define uma senha provisória para você, e no primeiro acesso o sistema pede que você crie uma senha nova.</p>
+                </div>
+            </div>
+            <div class="mt-5 flex justify-end">
+                <button type="button" onclick="closeModal('modal-forgot')" class="w-full sm:w-auto px-5 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition">Entendi</button>
+            </div>
+        </div>
+    </div>
+
+
+
+
+    <!-- MODAL: ALTERAR MINHA SENHA (obrigatório quando a senha é provisória) -->
+    <div id="modal-password" class="modal fixed inset-0 z-[55] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/60 backdrop-blur-sm hidden" role="dialog" aria-modal="true" aria-labelledby="password-title">
+        <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
             <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-                <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2" id="register-title">
-                    <i class="fa-solid fa-user-plus text-brand-600"></i> Criar Conta
+                <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2" id="password-title">
+                    <i class="fa-solid fa-key text-brand-600"></i> <span>Alterar Senha</span>
                 </h3>
-                <button onclick="closeModal('modal-register')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg" aria-label="Fechar">
+                <button id="password-close" onclick="closeModal('modal-password')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg" aria-label="Fechar">
                     <i class="fa-solid fa-xmark text-lg"></i>
                 </button>
             </div>
-            <form id="register-form" onsubmit="handleRegister(event)" class="p-4 sm:p-6 space-y-3.5 overflow-y-auto" novalidate>
+            <form id="password-form" onsubmit="handleChangePassword(event)" class="p-4 sm:p-6 space-y-3.5" novalidate>
+                <p id="password-forced-note" class="hidden p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+                    <i class="fa-solid fa-shield-halved mr-1"></i> Você entrou com uma senha provisória. Por segurança, crie uma senha pessoal antes de continuar.
+                </p>
                 <div class="form-error hidden p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium" role="alert"></div>
                 <div>
-                    <span class="block text-xs font-semibold text-slate-700 uppercase mb-1">Perfil</span>
-                    <div class="bg-slate-100 p-1 rounded-xl flex gap-1 border border-slate-200" data-field="role">
-                        <label class="flex-1">
-                            <input type="radio" name="reg-role" value="student" class="peer sr-only" checked>
-                            <span class="block text-center py-2 rounded-lg text-xs font-semibold text-slate-600 cursor-pointer peer-checked:bg-white peer-checked:text-slate-800 peer-checked:shadow-sm"><i class="fa-solid fa-user-graduate mr-1"></i> Estudante</span>
-                        </label>
-                        <label class="flex-1">
-                            <input type="radio" name="reg-role" value="teacher" class="peer sr-only">
-                            <span class="block text-center py-2 rounded-lg text-xs font-semibold text-slate-600 cursor-pointer peer-checked:bg-white peer-checked:text-slate-800 peer-checked:shadow-sm"><i class="fa-solid fa-user-tie mr-1"></i> Professor</span>
-                        </label>
-                    </div>
-                </div>
-                <div>
-                    <label for="reg-name" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Nome Completo</label>
-                    <input type="text" id="reg-name" data-field="name" autocomplete="name" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                    <label for="pwd-current" class="block text-xs font-semibold text-slate-700 uppercase mb-1" id="pwd-current-label">Senha Atual</label>
+                    <input type="password" id="pwd-current" data-field="currentPassword" autocomplete="current-password" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                        <label for="reg-matricula" class="block text-xs font-semibold text-slate-700 uppercase mb-1" id="reg-matricula-label">Matrícula</label>
-                        <input type="text" id="reg-matricula" data-field="matricula" autocomplete="username" placeholder="Ex: 202401234" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                        <label for="pwd-new" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Nova Senha</label>
+                        <input type="password" id="pwd-new" data-field="newPassword" autocomplete="new-password" placeholder="Mínimo 6 caracteres" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
                     </div>
                     <div>
-                        <label for="reg-email" class="block text-xs font-semibold text-slate-700 uppercase mb-1">E-mail</label>
-                        <input type="email" id="reg-email" data-field="email" autocomplete="email" placeholder="voce@universidade.edu.br" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
-                    </div>
-                </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                        <label for="reg-password" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Senha</label>
-                        <input type="password" id="reg-password" data-field="password" autocomplete="new-password" placeholder="Mínimo 6 caracteres" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
-                    </div>
-                    <div>
-                        <label for="reg-password2" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Confirmar Senha</label>
-                        <input type="password" id="reg-password2" data-field="password2" autocomplete="new-password" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                        <label for="pwd-new2" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Confirmar Nova Senha</label>
+                        <input type="password" id="pwd-new2" data-field="newPassword2" autocomplete="new-password" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
                     </div>
                 </div>
                 <div class="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-end gap-2">
-                    <button type="button" onclick="closeModal('modal-register')" class="w-full sm:w-auto px-4 py-2.5 text-slate-600 hover:bg-slate-100 font-semibold text-xs sm:text-sm rounded-xl transition">Cancelar</button>
-                    <button type="submit" id="reg-submit" class="w-full sm:w-auto px-5 py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition disabled:opacity-60 disabled:cursor-wait">Criar Conta e Entrar</button>
+                    <button type="button" id="password-cancel" onclick="closeModal('modal-password')" class="w-full sm:w-auto px-4 py-2.5 text-slate-600 hover:bg-slate-100 font-semibold text-xs sm:text-sm rounded-xl transition">Cancelar</button>
+                    <button type="button" id="password-logout" onclick="handleLogout()" class="hidden w-full sm:w-auto px-4 py-2.5 text-slate-600 hover:bg-slate-100 font-semibold text-xs sm:text-sm rounded-xl transition">Sair do sistema</button>
+                    <button type="submit" id="password-submit" class="w-full sm:w-auto px-5 py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition disabled:opacity-60 disabled:cursor-wait">Salvar Nova Senha</button>
                 </div>
             </form>
         </div>
@@ -850,43 +903,92 @@
 
 
 
-    <!-- MODAL: RECUPERAR SENHA -->
-    <div id="modal-reset" class="modal fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm hidden" role="dialog" aria-modal="true" aria-labelledby="reset-title">
-        <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+    <!-- MODAL: CADASTRAR / EDITAR USUÁRIO (painel administrativo) -->
+    <div id="modal-user" class="modal fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm hidden" role="dialog" aria-modal="true" aria-labelledby="user-title">
+        <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
             <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-                <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2" id="reset-title">
-                    <i class="fa-solid fa-key text-brand-600"></i> Redefinir Senha
+                <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2" id="user-title">
+                    <i class="fa-solid fa-user-plus text-brand-600"></i> <span>Novo Usuário</span>
                 </h3>
-                <button onclick="closeModal('modal-reset')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg" aria-label="Fechar">
+                <button onclick="closeModal('modal-user')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg" aria-label="Fechar">
                     <i class="fa-solid fa-xmark text-lg"></i>
                 </button>
             </div>
-            <form id="reset-form" onsubmit="handleResetPassword(event)" class="p-4 sm:p-6 space-y-3.5" novalidate>
-                <p class="text-xs text-slate-500">Confirme sua matrícula e o e-mail cadastrado para definir uma nova senha.</p>
+            <form id="user-form" onsubmit="handleSaveUser(event)" class="p-4 sm:p-6 space-y-3.5 overflow-y-auto" novalidate>
                 <div class="form-error hidden p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium" role="alert"></div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                        <label for="reset-matricula" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Matrícula</label>
-                        <input type="text" id="reset-matricula" data-field="matricula" autocomplete="username" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                <div>
+                    <span class="block text-xs font-semibold text-slate-700 uppercase mb-1">Perfil</span>
+                    <div class="bg-slate-100 p-1 rounded-xl flex gap-1 border border-slate-200" data-field="role">
+                        <label class="flex-1">
+                            <input type="radio" name="user-role" value="student" class="peer sr-only" checked>
+                            <span class="block text-center py-2 rounded-lg text-xs font-semibold text-slate-600 cursor-pointer peer-checked:bg-white peer-checked:text-slate-800 peer-checked:shadow-sm"><i class="fa-solid fa-user-graduate mr-1"></i> Estudante</span>
+                        </label>
+                        <label class="flex-1">
+                            <input type="radio" name="user-role" value="teacher" class="peer sr-only">
+                            <span class="block text-center py-2 rounded-lg text-xs font-semibold text-slate-600 cursor-pointer peer-checked:bg-white peer-checked:text-slate-800 peer-checked:shadow-sm"><i class="fa-solid fa-user-tie mr-1"></i> Professor</span>
+                        </label>
                     </div>
-                    <div>
-                        <label for="reset-email" class="block text-xs font-semibold text-slate-700 uppercase mb-1">E-mail cadastrado</label>
-                        <input type="email" id="reset-email" data-field="email" autocomplete="email" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
-                    </div>
+                </div>
+                <div>
+                    <label for="user-name" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Nome Completo</label>
+                    <input type="text" id="user-name" data-field="name" autocomplete="off" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                        <label for="reset-password" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Nova Senha</label>
-                        <input type="password" id="reset-password" data-field="password" autocomplete="new-password" placeholder="Mínimo 6 caracteres" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                        <label for="user-matricula" class="block text-xs font-semibold text-slate-700 uppercase mb-1" id="user-matricula-label">Matrícula</label>
+                        <input type="text" id="user-matricula" data-field="matricula" autocomplete="off" placeholder="Ex: 202401234" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
                     </div>
                     <div>
-                        <label for="reset-password2" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Confirmar Senha</label>
-                        <input type="password" id="reset-password2" data-field="password2" autocomplete="new-password" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                        <label for="user-email" class="block text-xs font-semibold text-slate-700 uppercase mb-1">E-mail</label>
+                        <input type="email" id="user-email" data-field="email" autocomplete="off" placeholder="nome@universidade.edu.br" class="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-brand-500 focus:outline-none">
                     </div>
+                </div>
+                <div id="user-password-block">
+                    <label for="user-password" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Senha Provisória</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="user-password" data-field="password" autocomplete="off" spellcheck="false" placeholder="Mínimo 6 caracteres" class="flex-1 min-w-0 p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                        <button type="button" onclick="fillGeneratedPassword('user-password')" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition whitespace-nowrap"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Gerar</button>
+                    </div>
+                    <p class="text-[11px] text-slate-400 mt-1">Repasse esta senha ao usuário. No primeiro acesso ele cria uma senha pessoal.</p>
                 </div>
                 <div class="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-end gap-2">
-                    <button type="button" onclick="closeModal('modal-reset')" class="w-full sm:w-auto px-4 py-2.5 text-slate-600 hover:bg-slate-100 font-semibold text-xs sm:text-sm rounded-xl transition">Cancelar</button>
-                    <button type="submit" id="reset-submit" class="w-full sm:w-auto px-5 py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition disabled:opacity-60 disabled:cursor-wait">Redefinir Senha</button>
+                    <button type="button" onclick="closeModal('modal-user')" class="w-full sm:w-auto px-4 py-2.5 text-slate-600 hover:bg-slate-100 font-semibold text-xs sm:text-sm rounded-xl transition">Cancelar</button>
+                    <button type="submit" id="user-submit" class="w-full sm:w-auto px-5 py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition disabled:opacity-60 disabled:cursor-wait">Cadastrar Usuário</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+
+
+
+    <!-- MODAL: DEFINIR SENHA PROVISÓRIA (painel administrativo) -->
+    <div id="modal-user-password" class="modal fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-slate-900/50 backdrop-blur-sm hidden" role="dialog" aria-modal="true" aria-labelledby="user-password-title">
+        <div class="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="p-4 sm:p-5 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2" id="user-password-title">
+                        <i class="fa-solid fa-key text-brand-600"></i> Redefinir Senha
+                    </h3>
+                    <p class="text-xs text-slate-500 mt-0.5" id="user-password-name"></p>
+                </div>
+                <button onclick="closeModal('modal-user-password')" class="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg" aria-label="Fechar">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <form id="user-password-form" onsubmit="handleSetUserPassword(event)" class="p-4 sm:p-6 space-y-3.5" novalidate>
+                <div class="form-error hidden p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-medium" role="alert"></div>
+                <div>
+                    <label for="reset-user-password" class="block text-xs font-semibold text-slate-700 uppercase mb-1">Nova Senha Provisória</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="reset-user-password" data-field="password" autocomplete="off" spellcheck="false" placeholder="Mínimo 6 caracteres" class="flex-1 min-w-0 p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-mono focus:ring-2 focus:ring-brand-500 focus:outline-none">
+                        <button type="button" onclick="fillGeneratedPassword('reset-user-password')" class="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition whitespace-nowrap"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i> Gerar</button>
+                    </div>
+                    <p class="text-[11px] text-slate-400 mt-1">O usuário é desconectado e deve criar uma senha pessoal no próximo acesso.</p>
+                </div>
+                <div class="pt-3 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-end gap-2">
+                    <button type="button" onclick="closeModal('modal-user-password')" class="w-full sm:w-auto px-4 py-2.5 text-slate-600 hover:bg-slate-100 font-semibold text-xs sm:text-sm rounded-xl transition">Cancelar</button>
+                    <button type="submit" id="user-password-submit" class="w-full sm:w-auto px-5 py-3 bg-brand-600 hover:bg-brand-700 text-white font-semibold text-xs sm:text-sm rounded-xl shadow-md transition disabled:opacity-60 disabled:cursor-wait">Definir Senha</button>
                 </div>
             </form>
         </div>

@@ -23,10 +23,16 @@ const state = {
     soapTab: 'tab-subjetivo',
     drawer: null,        // prontuário aberto: { patientId, fromEvolution, data }
     editingPatientId: null,
-    schedulePatientId: null
+    schedulePatientId: null,
+    adminUsers: [],
+    adminFilter: 'all',
+    editingUserId: null,
+    passwordUserId: null,
+    passwordForced: false
 };
 
-const SCREENS = ['loading', 'login', 'agenda', 'patients', 'evolution', 'teacher'];
+const SCREENS = ['loading', 'login', 'agenda', 'patients', 'evolution', 'teacher', 'admin'];
+const ROLE_LABELS = { student: 'Estudante', teacher: 'Professor', admin: 'Administrador' };
 const SOAP_TABS = ['tab-subjetivo', 'tab-objetivo', 'tab-avaliacao', 'tab-plano'];
 const REMEMBER_KEY = 'physioedu_remember';
 
@@ -109,7 +115,7 @@ function plural(n, one, many) {
 }
 
 function initials(name) {
-    const words = name.split(/\s+/).filter(w => w.length > 2);
+    const words = name.split(/\s+/).filter(w => w.length > 2 && !/^(prof|profª|dr|dra)\.?$/i.test(w));
     const first = words[0] || name;
     const last = words.length > 1 ? words[words.length - 1] : '';
     return (first.charAt(0) + last.charAt(0)).toUpperCase();
@@ -342,6 +348,10 @@ function showScreen(name) {
 function navItems() {
     if (!state.user) return [];
 
+    if (state.user.role === 'admin') {
+        return [{ key: 'admin', label: 'Usuários', icon: 'fa-users-gear', action: "go('#/admin')" }];
+    }
+
     if (state.user.role === 'teacher') {
         return [
             { key: 'teacher', label: 'Validações', icon: 'fa-clipboard-check', action: "go('#/validacoes')", count: state.badges.pending },
@@ -386,7 +396,9 @@ function parseHash() {
 }
 
 function homeHash() {
-    return state.user && state.user.role === 'teacher' ? '#/validacoes' : '#/agenda';
+    const role = state.user && state.user.role;
+    if (role === 'admin') return '#/admin';
+    return role === 'teacher' ? '#/validacoes' : '#/agenda';
 }
 
 function go(hash) {
@@ -427,9 +439,11 @@ function handleRoute() {
         if (name === 'pacientes') return showPatients();
         if (name === 'atendimento') return openAttendance(Number(param));
         if (name === 'correcao') return openCorrection(Number(param));
-    } else {
+    } else if (state.user.role === 'teacher') {
         if (name === 'validacoes') return showTeacherDashboard();
         if (name === 'pacientes') return showPatients();
+    } else if (state.user.role === 'admin') {
+        if (name === 'admin') return showAdmin();
     }
 
     replaceRoute(homeHash());
@@ -440,12 +454,13 @@ function refreshView() {
     if (state.screen === 'agenda') loadAgenda({ silent: true });
     if (state.screen === 'patients') loadPatients({ silent: true });
     if (state.screen === 'teacher') loadTeacherDashboard({ silent: true });
+    if (state.screen === 'admin') loadAdminUsers({ silent: true });
     if (state.drawer && state.drawer.data) refreshDrawer();
     refreshBadges();
 }
 
 async function refreshBadges() {
-    if (!state.user) return;
+    if (!state.user || state.user.role === 'admin') return;
     try {
         if (state.user.role === 'student') {
             state.corrections = await Api.get('/evolutions?status=correction&mine=1');
@@ -524,7 +539,8 @@ async function handleLogin(e) {
         else removeKey(REMEMBER_KEY);
         $('login-password').value = '';
         startSession(user);
-        showToast(user.role === 'student' ? 'Login efetuado com sucesso!' : 'Painel do Docente Acessado', user.role === 'student' ? 'success' : 'info');
+        const welcome = { student: 'Login efetuado com sucesso!', teacher: 'Painel do Docente Acessado', admin: 'Painel Administrativo Acessado' };
+        showToast(welcome[user.role] || welcome.student, user.role === 'student' ? 'success' : 'info');
     } catch (err) {
         showLoginError(err.message);
         $('login-password').select();
@@ -540,12 +556,13 @@ function startSession(user) {
     state.teacherFilter = 'pending';
 
     $('user-display-name').innerText = user.name;
-    $('user-display-role').innerText = user.role === 'student' ? 'Estudante' : 'Professor';
+    $('user-display-role').innerText = ROLE_LABELS[user.role] || user.role;
 
     const target = state.pendingHash || homeHash();
     state.pendingHash = null;
     go(target);
     refreshBadges();
+    if (user.mustChangePassword) openPasswordModal({ forced: true });
 }
 
 function endSession(message, type = 'info') {
@@ -556,6 +573,8 @@ function endSession(message, type = 'info') {
     state.patients = [];
     state.teacherItems = [];
     state.badges = { corrections: 0, pending: 0 };
+    state.adminUsers = [];
+    state.passwordForced = false;
     closeAllOverlays();
     history.replaceState(null, '', '#/login');
     applyRememberedLogin();
@@ -572,87 +591,46 @@ async function handleLogout() {
     endSession('Você saiu do sistema.');
 }
 
-function openRegisterModal() {
-    const form = $('register-form');
+// Troca da própria senha. Com forced = true (senha provisória definida pelo admin),
+// o modal não pode ser fechado: o usuário cria a senha pessoal ou sai do sistema.
+function openPasswordModal({ forced = false } = {}) {
+    const form = $('password-form');
     form.reset();
     clearFormErrors(form);
-    form.querySelector(`input[name="reg-role"][value="${state.loginRole}"]`).checked = true;
-    updateRegisterLabels();
-    openModal('modal-register');
+    state.passwordForced = forced;
+
+    $('password-title').querySelector('span').innerText = forced ? 'Crie sua Senha Pessoal' : 'Alterar Senha';
+    $('pwd-current-label').innerText = forced ? 'Senha Provisória' : 'Senha Atual';
+    $('password-forced-note').classList.toggle('hidden', !forced);
+    $('password-close').classList.toggle('hidden', forced);
+    $('password-cancel').classList.toggle('hidden', forced);
+    $('password-logout').classList.toggle('hidden', !forced);
+    openModal('modal-password');
 }
 
-function updateRegisterLabels() {
-    const role = document.querySelector('input[name="reg-role"]:checked').value;
-    $('reg-matricula-label').innerText = role === 'student' ? 'Matrícula' : 'Registro Funcional';
-    $('reg-matricula').placeholder = role === 'student' ? 'Ex: 202401234' : 'Ex: DOC-12345';
-}
-
-async function handleRegister(e) {
+async function handleChangePassword(e) {
     e.preventDefault();
     const form = e.target;
     clearFormErrors(form);
 
-    const data = {
-        role: form.querySelector('input[name="reg-role"]:checked').value,
-        name: $('reg-name').value,
-        matricula: $('reg-matricula').value,
-        email: $('reg-email').value,
-        password: $('reg-password').value
-    };
+    const currentPassword = $('pwd-current').value;
+    const newPassword = $('pwd-new').value;
 
-    const result = S.validateRegistration(data);
-    if (!result.ok) return showFormError(form, result.message, result.field);
-    if (data.password !== $('reg-password2').value) return showFormError(form, 'As senhas não conferem.', 'password2');
+    if (!currentPassword) return showFormError(form, 'Informe a senha atual.', 'currentPassword');
+    const result = S.validatePassword(newPassword);
+    if (!result.ok) return showFormError(form, result.message, 'newPassword');
+    if (newPassword !== $('pwd-new2').value) return showFormError(form, 'As senhas não conferem.', 'newPassword2');
+    if (newPassword === currentPassword) return showFormError(form, 'A nova senha precisa ser diferente da atual.', 'newPassword');
 
-    const button = $('reg-submit');
+    const button = $('password-submit');
     setBusy(button, true);
 
     try {
-        const { token, user } = await Api.post('/auth/register', data);
-        Api.setToken(token, true);
-        writeJSON(REMEMBER_KEY, { matricula: user.matricula, role: user.role });
-        closeModal('modal-register');
-        startSession(user);
-        showToast(`Conta criada! Bem-vindo(a), ${user.name}.`, 'success');
-    } catch (err) {
-        showFormError(form, err.message, err.field);
-    } finally {
-        setBusy(button, false);
-    }
-}
-
-function openResetModal() {
-    const form = $('reset-form');
-    form.reset();
-    clearFormErrors(form);
-    $('reset-matricula').value = $('login-id').value.trim();
-    openModal('modal-reset');
-}
-
-async function handleResetPassword(e) {
-    e.preventDefault();
-    const form = e.target;
-    clearFormErrors(form);
-
-    const matricula = $('reset-matricula').value.trim();
-    const email = $('reset-email').value.trim();
-    const newPassword = $('reset-password').value;
-
-    if (!matricula) return showFormError(form, 'Informe sua matrícula.', 'matricula');
-    if (!S.isValidEmail(email)) return showFormError(form, 'Informe o e-mail cadastrado.', 'email');
-    if (newPassword.length < 6) return showFormError(form, 'A nova senha deve ter pelo menos 6 caracteres.', 'password');
-    if (newPassword !== $('reset-password2').value) return showFormError(form, 'As senhas não conferem.', 'password2');
-
-    const button = $('reset-submit');
-    setBusy(button, true);
-
-    try {
-        const { message } = await Api.post('/auth/reset-password', { matricula, email, newPassword });
-        closeModal('modal-reset');
-        $('login-id').value = S.normalizeMatricula(matricula);
-        $('login-password').value = '';
-        $('login-password').focus();
-        showToast(message, 'success');
+        const { user } = await Api.post('/auth/change-password', { currentPassword, newPassword });
+        state.user = { ...state.user, ...user };
+        state.passwordForced = false;
+        closeModal('modal-password');
+        showToast('Senha alterada com sucesso!', 'success');
     } catch (err) {
         showFormError(form, err.message, err.field);
     } finally {
@@ -1907,6 +1885,257 @@ function renderTeacherDashboard() {
 }
 
 
+// ================= PAINEL ADMINISTRATIVO =================
+
+function showAdmin() {
+    showScreen('admin');
+    renderAdminUsers();
+    loadAdminUsers();
+}
+
+async function loadAdminUsers({ silent = false } = {}) {
+    const container = $('admin-users-container');
+    if (!silent && !state.adminUsers.length) container.innerHTML = loadingBlock('Carregando usuários...');
+
+    try {
+        state.adminUsers = await Api.get('/admin/users');
+        renderAdminUsers();
+    } catch (err) {
+        container.innerHTML = errorBlock(err.message, 'loadAdminUsers()');
+    }
+}
+
+function setAdminFilter(filter) {
+    state.adminFilter = state.adminFilter === filter && filter !== 'all' ? 'all' : filter;
+    renderAdminUsers();
+}
+
+function matchAdminFilter(user) {
+    if (state.adminFilter === 'inactive') return !user.active;
+    if (state.adminFilter === 'all') return true;
+    return user.role === state.adminFilter;
+}
+
+function renderAdminUsers() {
+    const container = $('admin-users-container');
+    const users = state.adminUsers;
+
+    $('astat-student').innerText = users.filter(u => u.role === 'student' && u.active).length;
+    $('astat-teacher').innerText = users.filter(u => u.role === 'teacher' && u.active).length;
+    $('astat-inactive').innerText = users.filter(u => !u.active).length;
+
+    document.querySelectorAll('.admin-tab').forEach(btn => {
+        const active = btn.dataset.filter === state.adminFilter;
+        btn.className = `admin-tab flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${active ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`;
+        btn.setAttribute('aria-pressed', String(active));
+    });
+    document.querySelectorAll('.admin-stat').forEach(btn => {
+        const active = btn.dataset.filter === state.adminFilter;
+        btn.classList.toggle('ring-2', active);
+        btn.classList.toggle('ring-brand-500', active);
+    });
+
+    const term = $('search-users').value.trim().toLowerCase();
+    const filtered = users
+        .filter(matchAdminFilter)
+        .filter(u => !term || [u.name, u.matricula, u.email].some(v => v.toLowerCase().includes(term)));
+
+    if (!users.length) {
+        container.innerHTML = emptyBlock('fa-solid fa-users', 'Nenhum estudante ou professor cadastrado ainda.', '',
+            '<button onclick="openUserModal()" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-xl text-xs font-semibold"><i class="fa-solid fa-user-plus mr-1"></i> Cadastrar usuário</button>');
+        return;
+    }
+
+    if (!filtered.length) {
+        container.innerHTML = emptyBlock('fa-solid fa-magnifying-glass', 'Nenhum usuário encontrado com esse filtro.', '');
+        return;
+    }
+
+    const roleBadge = role => role === 'teacher'
+        ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-indigo-50 text-indigo-700 border-indigo-200"><i class="fa-solid fa-user-tie mr-1"></i>Professor</span>'
+        : '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-brand-50 text-brand-700 border-brand-100"><i class="fa-solid fa-user-graduate mr-1"></i>Estudante</span>';
+
+    container.innerHTML = filtered.map(u => `
+        <div class="p-3.5 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-3 hover:bg-slate-50 transition ${u.active ? '' : 'opacity-70'}">
+            <div class="flex items-center gap-3 min-w-0">
+                <div class="w-10 h-10 sm:w-12 sm:h-12 rounded-xl ${u.role === 'teacher' ? 'bg-indigo-50 text-indigo-700 border-indigo-100' : 'bg-brand-50 text-brand-700 border-brand-100'} font-bold text-xs sm:text-sm flex items-center justify-center border shrink-0">${esc(initials(u.name))}</div>
+                <div class="min-w-0">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <h4 class="font-bold text-slate-800 text-sm sm:text-base">${esc(u.name)}</h4>
+                        ${roleBadge(u.role)}
+                        ${u.active ? '' : '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-rose-50 text-rose-700 border-rose-200"><i class="fa-solid fa-ban mr-1"></i>Desativado</span>'}
+                        ${u.active && u.mustChangePassword ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold border bg-amber-50 text-amber-700 border-amber-200"><i class="fa-solid fa-key mr-1"></i>Senha provisória</span>' : ''}
+                    </div>
+                    <p class="text-[11px] sm:text-xs text-slate-500 mt-0.5 truncate">${u.role === 'teacher' ? 'Registro' : 'Matrícula'} ${esc(u.matricula)} • ${esc(u.email)}</p>
+                    <p class="text-[11px] text-slate-400">
+                        ${u.lastLoginAt ? `Último acesso em ${formatDateTime(u.lastLoginAt)}` : 'Ainda não acessou o sistema'}
+                        • ${u.role === 'teacher' ? plural(u.reviewCount, 'evolução revisada', 'evoluções revisadas') : plural(u.evolutionCount, 'evolução registrada', 'evoluções registradas')}
+                    </p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2 justify-end border-t md:border-t-0 pt-2.5 md:pt-0 border-slate-100 shrink-0 flex-wrap">
+                <button onclick="openUserModal(${u.id})" class="${BTN_SECONDARY}"><i class="fa-regular fa-pen-to-square mr-1"></i> Editar</button>
+                <button onclick="openUserPasswordModal(${u.id})" class="${BTN_SECONDARY}"><i class="fa-solid fa-key mr-1"></i> Senha</button>
+                ${u.active
+                    ? `<button onclick="toggleUserActive(${u.id}, false)" class="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-semibold transition active:scale-95 whitespace-nowrap"><i class="fa-solid fa-ban mr-1"></i> Desativar</button>`
+                    : `<button onclick="toggleUserActive(${u.id}, true)" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold transition active:scale-95 whitespace-nowrap"><i class="fa-solid fa-rotate-left mr-1"></i> Reativar</button>`}
+            </div>
+        </div>`).join('');
+}
+
+function findAdminUser(id) {
+    return state.adminUsers.find(u => u.id === id);
+}
+
+// Senha provisória legível: sem caracteres que se confundem (0/O, 1/l/I)
+function generatePassword(length = 10) {
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz';
+    const digits = '23456789';
+    const all = letters + digits;
+    const random = new Uint32Array(length);
+    crypto.getRandomValues(random);
+    const chars = Array.from(random, n => all[n % all.length]);
+    chars[random[0] % length] = digits[random[1] % digits.length]; // garante ao menos um número
+    return chars.join('');
+}
+
+function fillGeneratedPassword(inputId) {
+    const input = $(inputId);
+    input.value = generatePassword();
+    input.classList.remove('field-invalid');
+    input.focus();
+    input.select();
+}
+
+function updateUserFormLabels() {
+    const role = document.querySelector('input[name="user-role"]:checked').value;
+    $('user-matricula-label').innerText = role === 'student' ? 'Matrícula' : 'Registro Funcional';
+    $('user-matricula').placeholder = role === 'student' ? 'Ex: 202401234' : 'Ex: DOC-12345';
+}
+
+function openUserModal(userId = null) {
+    const form = $('user-form');
+    form.reset();
+    clearFormErrors(form);
+    state.editingUserId = userId;
+
+    const user = userId ? findAdminUser(userId) : null;
+    $('user-title').querySelector('span').innerText = user ? 'Editar Usuário' : 'Novo Usuário';
+    $('user-password-block').classList.toggle('hidden', Boolean(user));
+    $('user-submit').innerText = user ? 'Salvar Alterações' : 'Cadastrar Usuário';
+
+    form.querySelector(`input[name="user-role"][value="${user ? user.role : (state.adminFilter === 'teacher' ? 'teacher' : 'student')}"]`).checked = true;
+    if (user) {
+        $('user-name').value = user.name;
+        $('user-matricula').value = user.matricula;
+        $('user-email').value = user.email;
+    } else {
+        $('user-password').value = generatePassword();
+    }
+
+    updateUserFormLabels();
+    openModal('modal-user');
+}
+
+async function handleSaveUser(e) {
+    e.preventDefault();
+    const form = e.target;
+    clearFormErrors(form);
+
+    const editing = Boolean(state.editingUserId);
+    const data = {
+        role: form.querySelector('input[name="user-role"]:checked').value,
+        name: $('user-name').value,
+        matricula: $('user-matricula').value,
+        email: $('user-email').value
+    };
+    if (!editing) data.password = $('user-password').value;
+
+    const result = editing ? S.validateUserUpdate(data) : S.validateRegistration(data);
+    if (!result.ok) return showFormError(form, result.message, result.field);
+
+    const button = $('user-submit');
+    setBusy(button, true);
+
+    try {
+        if (editing) {
+            await Api.put(`/admin/users/${state.editingUserId}`, data);
+            showToast('Cadastro do usuário atualizado.', 'success');
+        } else {
+            const { user } = await Api.post('/admin/users', data);
+            showToast(`${user.name} cadastrado(a). Login: ${user.matricula} • senha provisória: ${data.password}`, 'success', { duration: 12000 });
+        }
+        closeModal('modal-user');
+        loadAdminUsers({ silent: true });
+    } catch (err) {
+        showFormError(form, err.message, err.field);
+    } finally {
+        setBusy(button, false);
+    }
+}
+
+function openUserPasswordModal(userId) {
+    const user = findAdminUser(userId);
+    if (!user) return;
+
+    const form = $('user-password-form');
+    form.reset();
+    clearFormErrors(form);
+    state.passwordUserId = userId;
+    $('user-password-name').innerText = `${user.name} • ${user.matricula}`;
+    $('reset-user-password').value = generatePassword();
+    openModal('modal-user-password');
+}
+
+async function handleSetUserPassword(e) {
+    e.preventDefault();
+    const form = e.target;
+    clearFormErrors(form);
+
+    const password = $('reset-user-password').value;
+    const result = S.validatePassword(password);
+    if (!result.ok) return showFormError(form, result.message, 'password');
+
+    const button = $('user-password-submit');
+    setBusy(button, true);
+
+    try {
+        const { user } = await Api.post(`/admin/users/${state.passwordUserId}/password`, { password });
+        closeModal('modal-user-password');
+        showToast(`Nova senha provisória de ${user.name}: ${password}`, 'success', { duration: 12000 });
+        loadAdminUsers({ silent: true });
+    } catch (err) {
+        showFormError(form, err.message, err.field);
+    } finally {
+        setBusy(button, false);
+    }
+}
+
+async function toggleUserActive(userId, active) {
+    const user = findAdminUser(userId);
+    if (!user) return;
+
+    if (!active) {
+        const ok = await confirmDialog({
+            title: 'Desativar acesso?',
+            message: `${user.name} não vai mais conseguir entrar no sistema. Os atendimentos e evoluções já registrados continuam no prontuário. Você pode reativar depois.`,
+            confirmText: 'Desativar acesso',
+            tone: 'danger',
+            icon: 'fa-ban'
+        });
+        if (!ok) return;
+    }
+
+    try {
+        const { message } = await Api.patch(`/admin/users/${userId}/status`, { active });
+        showToast(`${message} (${user.name})`, active ? 'success' : 'info');
+    } catch (err) {
+        showToast(err.message, 'error');
+    }
+    loadAdminUsers({ silent: true });
+}
+
+
 // ================= INICIALIZAÇÃO =================
 
 function bindGlobalEvents() {
@@ -1923,7 +2152,7 @@ function bindGlobalEvents() {
 
     $('evolution-form').addEventListener('input', scheduleDraftSave);
     $('evolution-form').addEventListener('change', scheduleDraftSave);
-    document.querySelectorAll('input[name="reg-role"]').forEach(r => r.addEventListener('change', updateRegisterLabels));
+    document.querySelectorAll('input[name="user-role"]').forEach(r => r.addEventListener('change', updateUserFormLabels));
 
     // Clique fora fecha apenas modais de leitura (formulários não perdem dados por engano)
     ['modal-evolution-view', 'modal-confirm'].forEach(id => {
@@ -1934,8 +2163,12 @@ function bindGlobalEvents() {
 
     document.addEventListener('keydown', e => {
         if (e.key !== 'Escape') return;
-        if (modalStack.length) closeModal(modalStack[modalStack.length - 1]);
-        else if (state.drawer) toggleDrawer(false);
+        if (modalStack.length) {
+            const top = modalStack[modalStack.length - 1];
+            if (!(top === 'modal-password' && state.passwordForced)) closeModal(top);
+        } else if (state.drawer) {
+            toggleDrawer(false);
+        }
     });
 
     // Atualização automática: outra aba (modo local) ou outro usuário (modo servidor)
