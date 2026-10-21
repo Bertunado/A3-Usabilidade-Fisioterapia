@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db } = require('../db');
 const { toAdminUser } = require('../mappers');
+const { handle } = require('../http');
 const { requireRole } = require('../middleware/auth');
 const { validateRegistration, validateUserUpdate, validatePassword } = require('../../assets/js/shared');
 
@@ -17,20 +18,20 @@ const USER_SELECT = `
 `;
 
 // O painel gerencia apenas estudantes e professores (a conta admin não aparece na lista)
-function findManagedUser(id) {
-  return toAdminUser(db.prepare(`${USER_SELECT} WHERE u.id = ? AND u.role != 'admin'`).get(id));
+async function findManagedUser(id) {
+  return toAdminUser(await db.get(`${USER_SELECT} WHERE u.id = ? AND u.role != 'admin'`, [id]));
 }
 
-function matriculaTaken(matricula, exceptId = 0) {
-  return Boolean(db.prepare('SELECT id FROM users WHERE matricula = ? AND id != ?').get(matricula, exceptId));
+async function matriculaTaken(matricula, exceptId = 0) {
+  return Boolean(await db.get('SELECT id FROM users WHERE matricula = ? AND id != ?', [matricula, exceptId]));
 }
 
-router.get('/users', (req, res) => {
-  const rows = db.prepare(`${USER_SELECT} WHERE u.role != 'admin' ORDER BY u.name COLLATE NOCASE ASC`).all();
+router.get('/users', handle(async (req, res) => {
+  const rows = await db.all(`${USER_SELECT} WHERE u.role != 'admin' ORDER BY u.name COLLATE NOCASE ASC`);
   return res.json(rows.map(toAdminUser));
-});
+}));
 
-router.post('/users', (req, res) => {
+router.post('/users', handle(async (req, res) => {
   const result = validateRegistration(req.body);
 
   if (!result.ok) {
@@ -39,23 +40,23 @@ router.post('/users', (req, res) => {
 
   const { name, role, matricula, email, password } = result.value;
 
-  if (matriculaTaken(matricula)) {
+  if (await matriculaTaken(matricula)) {
     return res.status(409).json({ message: 'Já existe um usuário com essa matrícula.', field: 'matricula' });
   }
 
   // A senha definida pelo admin é provisória: o usuário troca no primeiro acesso
-  const info = db.prepare(`
+  const info = await db.run(`
     INSERT INTO users (name, email, role, matricula, password_hash, must_change_password, created_at)
     VALUES (?, ?, ?, ?, ?, 1, ?)
-  `).run(name, email, role, matricula, bcrypt.hashSync(password, 10), new Date().toISOString());
+  `, [name, email, role, matricula, await bcrypt.hash(password, 10), new Date().toISOString()]);
 
-  return res.status(201).json({ message: 'Usuário cadastrado.', user: findManagedUser(info.lastInsertRowid) });
-});
+  return res.status(201).json({ message: 'Usuário cadastrado.', user: await findManagedUser(info.lastInsertRowid) });
+}));
 
-router.put('/users/:id', (req, res) => {
+router.put('/users/:id', handle(async (req, res) => {
   const id = Number(req.params.id);
 
-  if (!findManagedUser(id)) {
+  if (!(await findManagedUser(id))) {
     return res.status(404).json({ message: 'Usuário não encontrado.' });
   }
 
@@ -67,20 +68,20 @@ router.put('/users/:id', (req, res) => {
 
   const { name, role, matricula, email } = result.value;
 
-  if (matriculaTaken(matricula, id)) {
+  if (await matriculaTaken(matricula, id)) {
     return res.status(409).json({ message: 'Já existe outro usuário com essa matrícula.', field: 'matricula' });
   }
 
-  db.prepare('UPDATE users SET name = ?, role = ?, matricula = ?, email = ? WHERE id = ?')
-    .run(name, role, matricula, email, id);
+  await db.run('UPDATE users SET name = ?, role = ?, matricula = ?, email = ? WHERE id = ?',
+    [name, role, matricula, email, id]);
 
-  return res.json({ message: 'Cadastro atualizado.', user: findManagedUser(id) });
-});
+  return res.json({ message: 'Cadastro atualizado.', user: await findManagedUser(id) });
+}));
 
-router.post('/users/:id/password', (req, res) => {
+router.post('/users/:id/password', handle(async (req, res) => {
   const id = Number(req.params.id);
 
-  if (!findManagedUser(id)) {
+  if (!(await findManagedUser(id))) {
     return res.status(404).json({ message: 'Usuário não encontrado.' });
   }
 
@@ -90,29 +91,27 @@ router.post('/users/:id/password', (req, res) => {
     return res.status(400).json({ message: result.message, field: 'password' });
   }
 
-  db.transaction(() => {
-    db.prepare('UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?')
-      .run(bcrypt.hashSync(result.value, 10), id);
-    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
-  })();
+  await db.batch([
+    ['UPDATE users SET password_hash = ?, must_change_password = 1 WHERE id = ?', [await bcrypt.hash(result.value, 10), id]],
+    ['DELETE FROM sessions WHERE user_id = ?', [id]]
+  ]);
 
-  return res.json({ message: 'Senha provisória definida.', user: findManagedUser(id) });
-});
+  return res.json({ message: 'Senha provisória definida.', user: await findManagedUser(id) });
+}));
 
-router.patch('/users/:id/status', (req, res) => {
+router.patch('/users/:id/status', handle(async (req, res) => {
   const id = Number(req.params.id);
   const active = Boolean(req.body.active);
 
-  if (!findManagedUser(id)) {
+  if (!(await findManagedUser(id))) {
     return res.status(404).json({ message: 'Usuário não encontrado.' });
   }
 
-  db.transaction(() => {
-    db.prepare('UPDATE users SET active = ? WHERE id = ?').run(active ? 1 : 0, id);
-    if (!active) db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
-  })();
+  const statements = [['UPDATE users SET active = ? WHERE id = ?', [active ? 1 : 0, id]]];
+  if (!active) statements.push(['DELETE FROM sessions WHERE user_id = ?', [id]]);
+  await db.batch(statements);
 
-  return res.json({ message: active ? 'Acesso reativado.' : 'Acesso desativado.', user: findManagedUser(id) });
-});
+  return res.json({ message: active ? 'Acesso reativado.' : 'Acesso desativado.', user: await findManagedUser(id) });
+}));
 
 module.exports = router;

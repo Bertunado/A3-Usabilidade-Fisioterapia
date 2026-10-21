@@ -18,8 +18,6 @@ if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
-initDatabase();
-
 // Frontend (mesmo arquivo publicado no GitHub Pages)
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
@@ -57,6 +55,13 @@ app.use((err, req, res, next) => {
   return res.status(500).json({ message: 'Erro interno do servidor' });
 });
 
-app.listen(PORT, () => {
-  console.log(`PhysioEdu rodando em http://localhost:${PORT}`);
-});
+initDatabase()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`PhysioEdu rodando em http://localhost:${PORT}`);
+    });
+  })
+  .catch(err => {
+    console.error('Não foi possível iniciar o banco de dados:', err);
+    process.exit(1);
+  });

@@ -1,0 +1,22 @@
+# Blueprint do Render: no painel do Render, New > Blueprint > selecione este repositório.
+# Os valores marcados com "sync: false" são pedidos na criação (ficam só no Render).
+services:
+  - type: web
+    name: physioedu
+    runtime: node
+    plan: free
+    region: virginia
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: DEMO_DATA
+        value: "false"
+      - key: TRUST_PROXY
+        value: "1"
+      - key: TURSO_DATABASE_URL
+        sync: false
+      - key: TURSO_AUTH_TOKEN
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false

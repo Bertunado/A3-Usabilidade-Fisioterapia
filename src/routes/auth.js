@@ -3,6 +3,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db } = require('../db');
 const { toUser } = require('../mappers');
+const { handle } = require('../http');
 const { requireAuth } = require('../middleware/auth');
 const { normalizeMatricula, validatePassword } = require('../../assets/js/shared');
 
@@ -30,18 +31,18 @@ function registerFailure(key) {
   failedLogins.set(key, entry);
 }
 
-function createSession(userId) {
+async function createSession(userId) {
   const token = crypto.randomBytes(32).toString('hex');
   const now = new Date();
   const expires = new Date(now.getTime() + SESSION_DAYS * 24 * 60 * 60 * 1000);
 
-  db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)')
-    .run(token, userId, now.toISOString(), expires.toISOString());
+  await db.run('INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)',
+    [token, userId, now.toISOString(), expires.toISOString()]);
 
   return token;
 }
 
-router.post('/login', (req, res) => {
+router.post('/login', handle(async (req, res) => {
   const { password, role } = req.body;
   const matricula = normalizeMatricula(req.body.matricula);
 
@@ -54,9 +55,9 @@ router.post('/login', (req, res) => {
     return res.status(429).json({ message: `Muitas tentativas de login. Aguarde ${BLOCK_MINUTES} minutos e tente novamente.` });
   }
 
-  const user = db.prepare('SELECT * FROM users WHERE matricula = ?').get(matricula);
+  const user = await db.get('SELECT * FROM users WHERE matricula = ?', [matricula]);
 
-  if (!user || !bcrypt.compareSync(String(password), user.password_hash)) {
+  if (!user || !(await bcrypt.compare(String(password), user.password_hash))) {
     registerFailure(attemptKey);
     return res.status(401).json({ message: 'Matrícula ou senha incorretas.' });
   }
@@ -73,24 +74,24 @@ router.post('/login', (req, res) => {
     return res.status(403).json({ message: `Esta matrícula pertence ao perfil ${profile}. Selecione o perfil correto acima.` });
   }
 
-  db.prepare('UPDATE users SET last_login_at = ? WHERE id = ?').run(new Date().toISOString(), user.id);
+  await db.run('UPDATE users SET last_login_at = ? WHERE id = ?', [new Date().toISOString(), user.id]);
 
   return res.json({
     message: 'Login realizado com sucesso.',
-    token: createSession(user.id),
+    token: await createSession(user.id),
     user: toUser(user)
   });
-});
+}));
 
 router.get('/me', requireAuth, (req, res) => {
   return res.json({ user: req.user });
 });
 
-router.post('/change-password', requireAuth, (req, res) => {
+router.post('/change-password', requireAuth, handle(async (req, res) => {
   const { currentPassword } = req.body;
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
+  const user = await db.get('SELECT * FROM users WHERE id = ?', [req.user.id]);
 
-  if (!bcrypt.compareSync(String(currentPassword || ''), user.password_hash)) {
+  if (!(await bcrypt.compare(String(currentPassword || ''), user.password_hash))) {
     return res.status(400).json({ message: 'A senha atual está incorreta.', field: 'currentPassword' });
   }
 
@@ -103,23 +104,22 @@ router.post('/change-password', requireAuth, (req, res) => {
     return res.status(400).json({ message: 'A nova senha precisa ser diferente da atual.', field: 'newPassword' });
   }
 
-  db.transaction(() => {
-    db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?')
-      .run(bcrypt.hashSync(result.value, 10), user.id);
+  await db.batch([
+    ['UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?', [await bcrypt.hash(result.value, 10), user.id]],
     // Encerra as sessões em outros dispositivos; mantém a atual
-    db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(user.id, req.token);
-  })();
+    ['DELETE FROM sessions WHERE user_id = ? AND token != ?', [user.id, req.token]]
+  ]);
 
   return res.json({
     message: 'Senha alterada com sucesso.',
-    user: toUser(db.prepare('SELECT * FROM users WHERE id = ?').get(user.id))
+    user: toUser(await db.get('SELECT * FROM users WHERE id = ?', [user.id]))
   });
-});
+}));
 
-router.post('/logout', requireAuth, (req, res) => {
-  db.prepare('DELETE FROM sessions WHERE token = ?').run(req.token);
+router.post('/logout', requireAuth, handle(async (req, res) => {
+  await db.run('DELETE FROM sessions WHERE token = ?', [req.token]);
   return res.json({ message: 'Sessão encerrada.' });
-});
+}));
 
 // Cadastro e redefinição de senha agora são feitos pelo administrador
 router.use((req, res) => res.status(404).json({ message: 'Rota não encontrada.' }));

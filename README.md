@@ -21,13 +21,25 @@ npm install
 npm start
 ```
 
-Abra **http://localhost:3000**. A mesma página detecta o servidor e passa a usar a API com banco SQLite (`database/physioedu.db`). Outros dispositivos na mesma rede podem acessar por `http://IP-DO-COMPUTADOR:3000`, e todos veem os mesmos dados (as telas se atualizam a cada 30 s).
+Abra **http://localhost:3000**. A mesma página detecta o servidor e passa a usar a API com banco SQLite local (`database/physioedu.db`). Outros dispositivos na mesma rede podem acessar por `http://IP-DO-COMPUTADOR:3000`, e todos veem os mesmos dados (as telas se atualizam a cada 30 s).
 
 Para usar o site do GitHub Pages com um backend hospedado (Render, Railway, VPS...), defina a URL da API no `index.html`, antes dos scripts:
 
 ```html
 <script>window.PHYSIOEDU_API_URL = 'https://minha-api.exemplo.com/';</script>
 ```
+
+### 3. Em produção (Render + Turso)
+
+O servidor roda no [Render](https://render.com) e o banco fica no [Turso](https://turso.tech), que é SQLite hospedado. Os dois têm plano gratuito.
+
+1. **Turso:** crie uma conta, crie um banco (por exemplo `physioedu`) na região AWS US East (Virginia) e gere um token de acesso. Anote a URL do banco (`libsql://...`) e o token.
+2. **Render:** crie uma conta com o GitHub, clique em **New > Blueprint** e selecione este repositório. O arquivo `render.yaml` já configura tudo; preencha:
+   - `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` com os dados do Turso;
+   - `ADMIN_PASSWORD` com a senha que o administrador vai usar.
+3. Aguarde o deploy e acesse o endereço `https://....onrender.com`. O banco começa vazio, apenas com o usuário `admin`.
+
+A cada `git push` na branch principal o Render publica a nova versão. No plano gratuito o servidor "dorme" após 15 minutos sem acesso; o primeiro acesso depois disso demora cerca de 1 minuto.
 
 ## Configuração do servidor
 
@@ -36,7 +48,8 @@ Variáveis de ambiente opcionais do `npm start`:
 | Variável | Para que serve |
 |---|---|
 | `PORT` | Porta do servidor (padrão `3000`) |
-| `DB_PATH` | Caminho do arquivo SQLite (padrão `database/physioedu.db`) |
+| `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` | Banco Turso (produção). Sem elas, usa o arquivo SQLite local |
+| `DB_PATH` | Caminho do arquivo SQLite local (padrão `database/physioedu.db`) |
 | `DEMO_DATA=false` | Não cria pacientes e contas de exemplo; o banco começa só com o administrador |
 | `ADMIN_PASSWORD` | Senha do administrador, usada apenas quando a conta admin é criada pela primeira vez |
 | `TRUST_PROXY=1` | Use quando o servidor estiver atrás de um proxy reverso (Nginx, Caddy), para o bloqueio de tentativas de login usar o IP real |
@@ -88,7 +101,8 @@ assets/js/local-backend.js "Servidor" do navegador, usado quando não há backen
 assets/js/api.js           Cliente da API: detecta o modo e envia as requisições
 assets/js/app.js           Lógica das telas
 server.js                  Servidor Express (API + arquivos da página)
-src/db.js                  Esquema SQLite e dados iniciais
+src/db.js                  Conexão (Turso ou arquivo local), esquema, migrações e dados iniciais
+render.yaml                Configuração de deploy no Render
 src/routes/*.js            Rotas: auth, admin, patients, appointments, evolutions
 ```
 

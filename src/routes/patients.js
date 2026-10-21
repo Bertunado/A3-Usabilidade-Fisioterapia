@@ -1,23 +1,24 @@
 const express = require('express');
 const { db } = require('../db');
 const { toPatient, toAppointment, toEvolution } = require('../mappers');
+const { handle } = require('../http');
 const { onlyDigits, toISODate, isValidDateISO, validatePatient, validateAppointment } = require('../../assets/js/shared');
 
 const router = express.Router();
 
-function findPatient(id) {
-  return toPatient(db.prepare('SELECT * FROM patients WHERE id = ?').get(id));
+async function findPatient(id) {
+  return toPatient(await db.get('SELECT * FROM patients WHERE id = ?', [id]));
 }
 
-function cpfTaken(cpf, exceptId = 0) {
-  return Boolean(db.prepare('SELECT id FROM patients WHERE cpf = ? AND id != ?').get(cpf, exceptId));
+async function cpfTaken(cpf, exceptId = 0) {
+  return Boolean(await db.get('SELECT id FROM patients WHERE cpf = ? AND id != ?', [cpf, exceptId]));
 }
 
-router.get('/patients', (req, res) => {
+router.get('/patients', handle(async (req, res) => {
   const q = String(req.query.q || '').trim().toLowerCase();
   const from = isValidDateISO(req.query.from) ? req.query.from : toISODate();
 
-  const rows = db.prepare(`
+  const rows = await db.all(`
     SELECT p.*,
       (SELECT COUNT(*) FROM evolutions e WHERE e.patient_id = p.id) AS evolution_count,
       (SELECT a.date || ' ' || a.time FROM appointments a
@@ -28,7 +29,7 @@ router.get('/patients', (req, res) => {
         ORDER BY a.date DESC, a.time DESC LIMIT 1) AS last_visit
     FROM patients p
     ORDER BY p.name COLLATE NOCASE ASC
-  `).all(from);
+  `, [from]);
 
   const digits = onlyDigits(q);
   const filtered = q
@@ -44,32 +45,31 @@ router.get('/patients', (req, res) => {
       lastVisit: r.last_visit
     };
   }));
-});
+}));
 
-router.get('/patients/:id', (req, res) => {
-  const patient = findPatient(Number(req.params.id));
+router.get('/patients/:id', handle(async (req, res) => {
+  const patient = await findPatient(Number(req.params.id));
 
   if (!patient) {
     return res.status(404).json({ message: 'Paciente não encontrado.' });
   }
 
-  const appointments = db
-    .prepare('SELECT * FROM appointments WHERE patient_id = ? ORDER BY date DESC, time DESC')
-    .all(patient.id)
-    .map(toAppointment);
+  const appointments = (await db.all(
+    'SELECT * FROM appointments WHERE patient_id = ? ORDER BY date DESC, time DESC', [patient.id]
+  )).map(toAppointment);
 
-  const evolutions = db.prepare(`
+  const evolutions = (await db.all(`
     SELECT e.*, a.date AS appt_date, a.time AS appt_time
     FROM evolutions e
     INNER JOIN appointments a ON a.id = e.appointment_id
     WHERE e.patient_id = ?
     ORDER BY a.date DESC, a.time DESC
-  `).all(patient.id).map(r => ({ ...toEvolution(r), appointment: { date: r.appt_date, time: r.appt_time } }));
+  `, [patient.id])).map(r => ({ ...toEvolution(r), appointment: { date: r.appt_date, time: r.appt_time } }));
 
   return res.json({ patient, appointments, evolutions });
-});
+}));
 
-router.post('/patients', (req, res) => {
+router.post('/patients', handle(async (req, res) => {
   const result = validatePatient(req.body);
 
   if (!result.ok) {
@@ -87,37 +87,40 @@ router.post('/patients', (req, res) => {
 
   const data = result.value;
 
-  if (cpfTaken(data.cpf)) {
+  if (await cpfTaken(data.cpf)) {
     return res.status(409).json({ message: 'Já existe um paciente cadastrado com este CPF.', field: 'cpf' });
   }
 
   const now = new Date().toISOString();
+  const statements = [[`
+    INSERT INTO patients (name, cpf, age, phone, specialty, diagnosis, history, created_by, created_at, updated_at)
+    VALUES (@name, @cpf, @age, @phone, @specialty, @diagnosis, @history, @createdBy, @now, @now)
+  `, { ...data, createdBy: req.user.id, now }]];
 
-  const created = db.transaction(() => {
-    const info = db.prepare(`
-      INSERT INTO patients (name, cpf, age, phone, specialty, diagnosis, history, created_by, created_at, updated_at)
-      VALUES (@name, @cpf, @age, @phone, @specialty, @diagnosis, @history, @createdBy, @now, @now)
-    `).run({ ...data, createdBy: req.user.id, now });
+  // A primeira sessão entra no mesmo lote, ligada ao paciente recém-criado
+  if (appointmentData) {
+    statements.push([`
+      INSERT INTO appointments (patient_id, date, time, status, created_at, updated_at)
+      VALUES (last_insert_rowid(), ?, ?, 'pending', ?, ?)
+    `, [appointmentData.date, appointmentData.time, now, now]]);
+  }
 
-    let appointment = null;
-    if (appointmentData) {
-      const apptInfo = db.prepare(`
-        INSERT INTO appointments (patient_id, date, time, status, created_at, updated_at)
-        VALUES (?, ?, ?, 'pending', ?, ?)
-      `).run(info.lastInsertRowid, appointmentData.date, appointmentData.time, now, now);
-      appointment = toAppointment(db.prepare('SELECT * FROM appointments WHERE id = ?').get(apptInfo.lastInsertRowid));
-    }
+  const [patientInfo, appointmentInfo] = await db.batch(statements);
+  const appointment = appointmentInfo
+    ? toAppointment(await db.get('SELECT * FROM appointments WHERE id = ?', [appointmentInfo.lastInsertRowid]))
+    : null;
 
-    return { patient: findPatient(info.lastInsertRowid), appointment };
-  })();
+  return res.status(201).json({
+    message: 'Paciente cadastrado com sucesso.',
+    patient: await findPatient(patientInfo.lastInsertRowid),
+    appointment
+  });
+}));
 
-  return res.status(201).json({ message: 'Paciente cadastrado com sucesso.', ...created });
-});
-
-router.put('/patients/:id', (req, res) => {
+router.put('/patients/:id', handle(async (req, res) => {
   const id = Number(req.params.id);
 
-  if (!findPatient(id)) {
+  if (!(await findPatient(id))) {
     return res.status(404).json({ message: 'Paciente não encontrado.' });
   }
 
@@ -129,18 +132,18 @@ router.put('/patients/:id', (req, res) => {
 
   const data = result.value;
 
-  if (cpfTaken(data.cpf, id)) {
+  if (await cpfTaken(data.cpf, id)) {
     return res.status(409).json({ message: 'Já existe outro paciente com este CPF.', field: 'cpf' });
   }
 
-  db.prepare(`
+  await db.run(`
     UPDATE patients
     SET name = @name, cpf = @cpf, age = @age, phone = @phone, specialty = @specialty,
         diagnosis = @diagnosis, history = @history, updated_at = @now
     WHERE id = @id
-  `).run({ ...data, id, now: new Date().toISOString() });
+  `, { ...data, id, now: new Date().toISOString() });
 
-  return res.json({ message: 'Cadastro atualizado.', patient: findPatient(id) });
-});
+  return res.json({ message: 'Cadastro atualizado.', patient: await findPatient(id) });
+}));
 
 module.exports = router;

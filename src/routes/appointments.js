@@ -1,27 +1,28 @@
 const express = require('express');
 const { db } = require('../db');
 const { toPatient, toAppointment, toEvolution } = require('../mappers');
+const { handle } = require('../http');
 const { isValidDateISO, validateAppointment } = require('../../assets/js/shared');
 
 const router = express.Router();
 
-function findAppointment(id) {
-  return toAppointment(db.prepare('SELECT * FROM appointments WHERE id = ?').get(id));
+async function findAppointment(id) {
+  return toAppointment(await db.get('SELECT * FROM appointments WHERE id = ?', [id]));
 }
 
-function studentName(id) {
-  const row = id ? db.prepare('SELECT name FROM users WHERE id = ?').get(id) : null;
+async function studentName(id) {
+  const row = id ? await db.get('SELECT name FROM users WHERE id = ?', [id]) : null;
   return row ? row.name : '';
 }
 
-router.get('/appointments', (req, res) => {
+router.get('/appointments', handle(async (req, res) => {
   const { date } = req.query;
 
   if (!isValidDateISO(date)) {
     return res.status(400).json({ message: 'Informe a data no formato AAAA-MM-DD.' });
   }
 
-  const rows = db.prepare(`
+  const rows = await db.all(`
     SELECT a.*,
       p.name AS p_name, p.cpf AS p_cpf, p.age AS p_age, p.specialty AS p_specialty, p.diagnosis AS p_diagnosis,
       u.name AS student_name,
@@ -32,7 +33,7 @@ router.get('/appointments', (req, res) => {
     LEFT JOIN evolutions e ON e.appointment_id = a.id
     WHERE a.date = ?
     ORDER BY a.time ASC, p.name COLLATE NOCASE ASC
-  `).all(date);
+  `, [date]);
 
   return res.json(rows.map(r => ({
     ...toAppointment(r),
@@ -47,28 +48,28 @@ router.get('/appointments', (req, res) => {
     },
     evolution: r.evo_id ? { id: r.evo_id, status: r.evo_status, studentId: r.evo_student_id } : null
   })));
-});
+}));
 
-router.get('/appointments/:id', (req, res) => {
-  const appointment = findAppointment(Number(req.params.id));
+router.get('/appointments/:id', handle(async (req, res) => {
+  const appointment = await findAppointment(Number(req.params.id));
 
   if (!appointment) {
     return res.status(404).json({ message: 'Agendamento não encontrado.' });
   }
 
-  const patient = toPatient(db.prepare('SELECT * FROM patients WHERE id = ?').get(appointment.patientId));
-  const evolution = toEvolution(db.prepare('SELECT * FROM evolutions WHERE appointment_id = ?').get(appointment.id));
+  const patient = toPatient(await db.get('SELECT * FROM patients WHERE id = ?', [appointment.patientId]));
+  const evolution = toEvolution(await db.get('SELECT * FROM evolutions WHERE appointment_id = ?', [appointment.id]));
 
   return res.json({
-    appointment: { ...appointment, studentName: studentName(appointment.studentId) },
+    appointment: { ...appointment, studentName: await studentName(appointment.studentId) },
     patient,
     evolution
   });
-});
+}));
 
-router.post('/appointments', (req, res) => {
+router.post('/appointments', handle(async (req, res) => {
   const patientId = Number(req.body.patientId);
-  const patient = db.prepare('SELECT id FROM patients WHERE id = ?').get(patientId);
+  const patient = await db.get('SELECT id FROM patients WHERE id = ?', [patientId]);
 
   if (!patient) {
     return res.status(404).json({ message: 'Paciente não encontrado.' });
@@ -82,27 +83,27 @@ router.post('/appointments', (req, res) => {
 
   const { date, time } = result.value;
 
-  const clash = db.prepare(`
+  const clash = await db.get(`
     SELECT id FROM appointments WHERE patient_id = ? AND date = ? AND time = ? AND status != 'absent'
-  `).get(patientId, date, time);
+  `, [patientId, date, time]);
 
   if (clash) {
     return res.status(409).json({ message: 'Este paciente já tem uma sessão agendada neste dia e horário.' });
   }
 
   const now = new Date().toISOString();
-  const info = db.prepare(`
+  const info = await db.run(`
     INSERT INTO appointments (patient_id, date, time, status, created_at, updated_at)
     VALUES (?, ?, ?, 'pending', ?, ?)
-  `).run(patientId, date, time, now, now);
+  `, [patientId, date, time, now, now]);
 
-  return res.status(201).json({ message: 'Sessão agendada.', appointment: findAppointment(info.lastInsertRowid) });
-});
+  return res.status(201).json({ message: 'Sessão agendada.', appointment: await findAppointment(info.lastInsertRowid) });
+}));
 
-router.patch('/appointments/:id/status', (req, res) => {
+router.patch('/appointments/:id/status', handle(async (req, res) => {
   const id = Number(req.params.id);
   const { status } = req.body;
-  const appointment = findAppointment(id);
+  const appointment = await findAppointment(id);
 
   if (!appointment) {
     return res.status(404).json({ message: 'Agendamento não encontrado.' });
@@ -117,6 +118,7 @@ router.patch('/appointments/:id/status', (req, res) => {
   }
 
   let studentId = appointment.studentId;
+  const busyByOther = appointment.status === 'attending' && appointment.studentId && appointment.studentId !== req.user.id;
 
   if (status === 'attending') {
     if (req.user.role !== 'student') {
@@ -125,26 +127,26 @@ router.patch('/appointments/:id/status', (req, res) => {
     if (appointment.status === 'absent') {
       return res.status(409).json({ message: 'O paciente está marcado como falta. Desfaça a falta antes de atender.' });
     }
-    if (appointment.status === 'attending' && appointment.studentId && appointment.studentId !== req.user.id) {
-      return res.status(409).json({ message: `Paciente já está em atendimento por ${studentName(appointment.studentId)}.` });
+    if (busyByOther) {
+      return res.status(409).json({ message: `Paciente já está em atendimento por ${await studentName(appointment.studentId)}.` });
     }
     studentId = req.user.id;
   } else {
-    if (appointment.status === 'attending' && appointment.studentId && appointment.studentId !== req.user.id && req.user.role !== 'teacher') {
-      return res.status(409).json({ message: `Paciente está em atendimento por ${studentName(appointment.studentId)}.` });
+    if (busyByOther && req.user.role !== 'teacher') {
+      return res.status(409).json({ message: `Paciente está em atendimento por ${await studentName(appointment.studentId)}.` });
     }
     studentId = null;
   }
 
-  db.prepare('UPDATE appointments SET status = ?, student_id = ?, updated_at = ? WHERE id = ?')
-    .run(status, studentId, new Date().toISOString(), id);
+  await db.run('UPDATE appointments SET status = ?, student_id = ?, updated_at = ? WHERE id = ?',
+    [status, studentId, new Date().toISOString(), id]);
 
-  return res.json({ message: 'Status atualizado.', appointment: findAppointment(id) });
-});
+  return res.json({ message: 'Status atualizado.', appointment: await findAppointment(id) });
+}));
 
-router.delete('/appointments/:id', (req, res) => {
+router.delete('/appointments/:id', handle(async (req, res) => {
   const id = Number(req.params.id);
-  const appointment = findAppointment(id);
+  const appointment = await findAppointment(id);
 
   if (!appointment) {
     return res.status(404).json({ message: 'Agendamento não encontrado.' });
@@ -154,9 +156,9 @@ router.delete('/appointments/:id', (req, res) => {
     return res.status(409).json({ message: 'Só é possível desmarcar sessões que ainda não foram iniciadas.' });
   }
 
-  db.prepare('DELETE FROM appointments WHERE id = ?').run(id);
+  await db.run('DELETE FROM appointments WHERE id = ?', [id]);
 
   return res.json({ message: 'Sessão desmarcada.' });
-});
+}));
 
 module.exports = router;
