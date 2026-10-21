@@ -1,7 +1,7 @@
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
-const { initDatabase } = require('./src/db');
+const { initDatabase, DATABASE_KIND } = require('./src/db');
 const { requireAuth, requireRole } = require('./src/middleware/auth');
 const authRoutes = require('./src/routes/auth');
 const adminRoutes = require('./src/routes/admin');
@@ -36,7 +36,7 @@ app.get('/api', (req, res) => {
   });
 });
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', mode: 'server' }));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', mode: 'server', database: DATABASE_KIND }));
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', requireAuth, adminRoutes);

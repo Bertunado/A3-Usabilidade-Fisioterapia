@@ -278,4 +278,4 @@ async function initDatabase() {
   await db.run('DELETE FROM sessions WHERE expires_at < ?', [new Date().toISOString()]);
 }
 
-module.exports = { db, initDatabase };
+module.exports = { db, initDatabase, DATABASE_KIND: isLocalFile ? 'local' : 'turso' };
