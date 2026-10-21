@@ -1334,14 +1334,30 @@ function switchSoapTab(tabId) {
     activeBtn.setAttribute('aria-selected', 'true');
     activeBtn.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 
+    // "Finalizar" só aparece na última etapa; antes dela o botão principal é "Próxima"
     const index = SOAP_TABS.indexOf(tabId);
-    $('evo-prev-btn').classList.toggle('invisible', index === 0);
-    $('evo-next-btn').classList.toggle('invisible', index === SOAP_TABS.length - 1);
+    const last = index === SOAP_TABS.length - 1;
+    $('evo-prev-btn').classList.toggle('hidden', index === 0);
+    $('evo-next-btn').classList.toggle('hidden', last);
+    $('evo-skip-btn').classList.toggle('hidden', last);
+    $('evo-submit-btn').classList.toggle('hidden', !last);
+    $('evo-form-error').classList.add('hidden');
 }
 
+// "Prosseguir sem preencher" e "Anterior": troca de etapa sem conferir os campos
 function stepSoapTab(delta) {
     const index = SOAP_TABS.indexOf(state.soapTab) + delta;
     if (index >= 0 && index < SOAP_TABS.length) switchSoapTab(SOAP_TABS[index]);
+}
+
+// "Próxima": confere os campos da etapa atual antes de avançar
+function nextSoapTab() {
+    const errors = S.evolutionErrors(collectEvolutionForm()).filter(e => FIELD_TAB[e.field] === state.soapTab);
+    if (errors.length) {
+        showEvolutionError(errors[0].field, errors[0].message, 'Se preferir, use "Prosseguir sem preencher" e complete depois.');
+        return;
+    }
+    stepSoapTab(1);
 }
 
 function updateTabIndicators() {
@@ -1395,12 +1411,13 @@ function setDraftStatus(savedAt) {
     $('draft-status').innerText = savedAt ? `Rascunho salvo às ${formatTime(savedAt)}` : '';
 }
 
-function showEvolutionError(field, message) {
+function showEvolutionError(field, message, hint = '') {
+    if (FIELD_TAB[field]) switchSoapTab(FIELD_TAB[field]);
+
     const box = $('evo-form-error');
-    box.innerHTML = `<i class="fa-solid fa-circle-exclamation mr-1"></i> ${esc(message)}`;
+    box.innerHTML = `<i class="fa-solid fa-circle-exclamation mr-1"></i> ${esc(message)}${hint ? ` <span class="font-normal">${esc(hint)}</span>` : ''}`;
     box.classList.remove('hidden');
 
-    if (FIELD_TAB[field]) switchSoapTab(FIELD_TAB[field]);
     const input = $(FIELD_INPUT[field]);
     if (input) {
         input.classList.add('field-invalid');
@@ -1412,6 +1429,9 @@ function showEvolutionError(field, message) {
 async function handleFinishEvolution(e) {
     e.preventDefault();
     if (!state.evo) return;
+
+    // Enter num campo antes da última etapa apenas avança
+    if (state.soapTab !== SOAP_TABS[SOAP_TABS.length - 1]) return nextSoapTab();
 
     const { mode, appointment, patient, evolution } = state.evo;
     const data = collectEvolutionForm();

@@ -176,34 +176,38 @@
     return ok({ date: input.date, time: input.time });
   }
 
-  function validateEvolution(input) {
+  // Confere todos os campos da evolução e devolve a lista de erros (na ordem das abas S-O-A-P)
+  function checkEvolution(input) {
+    const errors = [];
+    const error = (message, field) => errors.push({ message, field });
+
     const eva = Number(input.eva);
     if (!Number.isInteger(eva) || eva < 0 || eva > 10) {
-      return fail('A escala de dor (EVA) deve ser um valor de 0 a 10.', 'eva');
+      error('A escala de dor (EVA) deve ser um valor de 0 a 10.', 'eva');
     }
 
     const subjective = clean(input.subjective);
-    if (subjective.length < 3) return fail('Preencha o relato subjetivo do paciente (aba S).', 'subjective');
+    if (subjective.length < 3) error('Preencha o relato subjetivo do paciente (aba S).', 'subjective');
 
     let pa = clean(input.pa, 30);
     if (pa) {
       const match = pa.match(/(\d{2,3})\s*[/xX]\s*(\d{2,3})/);
-      if (!match) return fail('Pressão arterial inválida. Use o formato 120/80.', 'pa');
-      pa = `${match[1]}/${match[2]}`;
+      if (match) pa = `${match[1]}/${match[2]}`;
+      else error('Pressão arterial inválida. Use o formato 120/80.', 'pa');
     }
 
     let fc = clean(input.fc, 20);
     if (fc) {
       const value = Number((fc.match(/\d+/) || [])[0]);
-      if (!value || value < 20 || value > 250) return fail('Frequência cardíaca inválida (20 a 250 bpm).', 'fc');
-      fc = String(value);
+      if (value >= 20 && value <= 250) fc = String(value);
+      else error('Frequência cardíaca inválida (20 a 250 bpm).', 'fc');
     }
 
     let spo2 = clean(input.spo2, 20);
     if (spo2) {
       const value = Number((spo2.match(/\d+/) || [])[0]);
-      if (!value || value < 50 || value > 100) return fail('Saturação inválida (50% a 100%).', 'spo2');
-      spo2 = String(value);
+      if (value >= 50 && value <= 100) spo2 = String(value);
+      else error('Saturação inválida (50% a 100%).', 'spo2');
     }
 
     const procedures = Array.isArray(input.procedures)
@@ -211,21 +215,31 @@
       : [];
 
     const conduct = clean(input.conduct);
-    if (conduct.length < 3) {
-      return fail('Descreva a conduta/tratamento aplicado (aba Conduta).', 'conduct');
-    }
+    if (conduct.length < 3) error('Descreva a conduta/tratamento aplicado (aba Conduta).', 'conduct');
 
-    return ok({
-      eva,
-      subjective,
-      pa,
-      fc,
-      spo2,
-      objective: clean(input.objective),
-      procedures,
-      conduct,
-      plan: clean(input.plan)
-    });
+    return {
+      errors,
+      value: {
+        eva,
+        subjective,
+        pa,
+        fc,
+        spo2,
+        objective: clean(input.objective),
+        procedures,
+        conduct,
+        plan: clean(input.plan)
+      }
+    };
+  }
+
+  function validateEvolution(input) {
+    const { errors, value } = checkEvolution(input);
+    return errors.length ? fail(errors[0].message, errors[0].field) : ok(value);
+  }
+
+  function evolutionErrors(input) {
+    return checkEvolution(input).errors;
   }
 
   // ---------- dados de demonstração ----------
@@ -385,6 +399,7 @@
     validatePatient,
     validateAppointment,
     validateEvolution,
+    evolutionErrors,
     buildSeed
   };
 });
