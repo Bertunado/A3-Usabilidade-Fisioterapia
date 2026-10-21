@@ -10,6 +10,8 @@ const { normalizeMatricula, validatePassword } = require('../../assets/js/shared
 const router = express.Router();
 
 const SESSION_DAYS = 7;
+// A sessão do administrador expira em poucas horas (além de terminar ao sair da página)
+const ADMIN_SESSION_HOURS = 8;
 
 // Bloqueio simples contra tentativas repetidas de senha (por IP + matrícula)
 const MAX_ATTEMPTS = 8;
@@ -31,13 +33,14 @@ function registerFailure(key) {
   failedLogins.set(key, entry);
 }
 
-async function createSession(userId) {
+async function createSession(user) {
   const token = crypto.randomBytes(32).toString('hex');
   const now = new Date();
-  const expires = new Date(now.getTime() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+  const hours = user.role === 'admin' ? ADMIN_SESSION_HOURS : SESSION_DAYS * 24;
+  const expires = new Date(now.getTime() + hours * 60 * 60 * 1000);
 
   await db.run('INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)',
-    [token, userId, now.toISOString(), expires.toISOString()]);
+    [token, user.id, now.toISOString(), expires.toISOString()]);
 
   return token;
 }
@@ -78,7 +81,7 @@ router.post('/login', handle(async (req, res) => {
 
   return res.json({
     message: 'Login realizado com sucesso.',
-    token: await createSession(user.id),
+    token: await createSession(user),
     user: toUser(user)
   });
 }));

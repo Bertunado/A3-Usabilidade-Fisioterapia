@@ -57,7 +57,12 @@
   // Cada aba guarda o próprio token no sessionStorage (permite estudante e professor
   // logados em abas diferentes). Com "manter conectado", ele também vai para o
   // localStorage, para que novas abas/visitas já entrem logadas.
+  // A sessão do administrador fica só na memória da aba: recarregar ou sair da
+  // página encerra o acesso.
+  let memoryToken = null;
+
   function getToken() {
+    if (memoryToken) return memoryToken;
     const session = safeStorage('sessionStorage');
     const local = safeStorage('localStorage');
     const sessionToken = session && session.getItem(TOKEN_KEY);
@@ -69,6 +74,10 @@
   }
 
   function clearToken() {
+    if (memoryToken) {
+      memoryToken = null;
+      return;
+    }
     const token = getToken();
     const session = safeStorage('sessionStorage');
     const local = safeStorage('localStorage');
@@ -76,7 +85,12 @@
     if (local && local.getItem(TOKEN_KEY) === token) local.removeItem(TOKEN_KEY);
   }
 
-  function setToken(token, remember) {
+  function setToken(token, remember, { memoryOnly = false } = {}) {
+    if (memoryOnly) {
+      memoryToken = token;
+      return;
+    }
+    memoryToken = null;
     const session = safeStorage('sessionStorage');
     const local = safeStorage('localStorage');
     if (session) session.setItem(TOKEN_KEY, token);
@@ -84,6 +98,26 @@
       if (remember) local.setItem(TOKEN_KEY, token);
       else local.removeItem(TOKEN_KEY);
     }
+  }
+
+  // Encerra a sessão no servidor enquanto a página está sendo fechada/recarregada.
+  // "keepalive" deixa a requisição terminar mesmo depois que a página some.
+  function logoutOnExit() {
+    const token = getToken();
+    if (!token) return;
+    if (state.mode === 'server') {
+      try {
+        fetch(`${state.base}api/auth/logout`, {
+          method: 'POST',
+          keepalive: true,
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: '{}'
+        }).catch(() => {});
+      } catch (err) { /* a página já está saindo */ }
+    } else if (window.LocalBackend) {
+      window.LocalBackend.handle('POST', '/auth/logout', {}, token).catch(() => {});
+    }
+    clearToken();
   }
 
   async function request(method, path, body) {
@@ -134,6 +168,7 @@
     getToken,
     setToken,
     clearToken,
+    logoutOnExit,
     onUnauthorized: null,
     ApiError
   };

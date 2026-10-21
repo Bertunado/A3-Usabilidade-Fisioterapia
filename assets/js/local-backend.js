@@ -8,6 +8,7 @@
   const STORAGE_KEY = 'physioedu_db_v2';
   const SCHEMA_VERSION = 3;
   const SESSION_DAYS = 7;
+  const ADMIN_SESSION_HOURS = 8;
 
   // Hash (SHA-256 com sal) da senha padrão do administrador; a senha em si não fica no código
   const ADMIN_SALT = 'c41668f827af8584a2888156b6193339';
@@ -199,15 +200,16 @@
     return user;
   }
 
-  function createSession(userId) {
+  function createSession(user) {
     const token = randomToken();
     const now = new Date();
+    const hours = user.role === 'admin' ? ADMIN_SESSION_HOURS : SESSION_DAYS * 24;
     db.sessions = db.sessions.filter(s => s.expiresAt >= now.toISOString());
     db.sessions.push({
       token,
-      userId,
+      userId: user.id,
       createdAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + SESSION_DAYS * 864e5).toISOString()
+      expiresAt: new Date(now.getTime() + hours * 36e5).toISOString()
     });
     return token;
   }
@@ -236,7 +238,7 @@
     }
 
     user.lastLoginAt = nowISO();
-    const token = createSession(user.id);
+    const token = createSession(user);
     save();
     return { message: 'Login realizado com sucesso.', token, user: publicUser(user) };
   }

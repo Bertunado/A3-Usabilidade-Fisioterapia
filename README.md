@@ -83,6 +83,7 @@ Não há cadastro público. Novos estudantes e professores são criados no paine
 - Cadastro de estudantes e professores com senha provisória (gerada automaticamente ou digitada).
 - Edição de dados, redefinição de senha e desativação/reativação do acesso, sem apagar o histórico de atendimentos.
 - Lista com busca, filtros por perfil e indicação de último acesso e de senha provisória pendente.
+- Por segurança, a sessão do administrador não fica salva: recarregar, fechar a aba ou sair do site exige novo login (e ela expira sozinha em 8 horas).
 
 **Todos os perfis**
 - Troca da própria senha pelo ícone de chave no cabeçalho.

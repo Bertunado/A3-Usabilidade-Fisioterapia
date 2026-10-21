@@ -534,9 +534,14 @@ async function handleLogin(e) {
     try {
         const { token, user } = await Api.post('/auth/login', { matricula, password, role: state.loginRole });
         const remember = $('login-remember').checked;
-        Api.setToken(token, remember);
-        if (remember) writeJSON(REMEMBER_KEY, { matricula: user.matricula, role: user.role });
-        else removeKey(REMEMBER_KEY);
+        if (user.role === 'admin') {
+            // O administrador nunca fica conectado: a sessão vive só nesta aba aberta
+            Api.setToken(token, false, { memoryOnly: true });
+        } else {
+            Api.setToken(token, remember);
+            if (remember) writeJSON(REMEMBER_KEY, { matricula: user.matricula, role: user.role });
+            else removeKey(REMEMBER_KEY);
+        }
         $('login-password').value = '';
         startSession(user);
         const welcome = { student: 'Login efetuado com sucesso!', teacher: 'Painel do Docente Acessado', admin: 'Painel Administrativo Acessado' };
@@ -2183,6 +2188,35 @@ function bindGlobalEvents() {
     }, 30000);
 
     window.addEventListener('beforeunload', flushDraft);
+
+    // Administrador: recarregar, fechar a aba ou sair do site encerra a sessão
+    window.addEventListener('pagehide', () => {
+        if (!state.user || state.user.role !== 'admin') return;
+        try {
+            sessionStorage.setItem(ADMIN_EXIT_KEY, '1');
+        } catch (err) { /* armazenamento indisponível */ }
+        Api.logoutOnExit();
+    });
+    // Voltando pelo botão "voltar" do navegador (página restaurada do cache)
+    window.addEventListener('pageshow', e => {
+        if (e.persisted && state.user && state.user.role === 'admin') {
+            state.user = null;
+            endSession(ADMIN_EXIT_MESSAGE, 'info');
+        }
+    });
+}
+
+const ADMIN_EXIT_KEY = 'physioedu_admin_exit';
+const ADMIN_EXIT_MESSAGE = 'Por segurança, a sessão do administrador é encerrada ao recarregar ou sair da página. Entre novamente.';
+
+function consumeAdminExitNotice() {
+    try {
+        if (sessionStorage.getItem(ADMIN_EXIT_KEY)) {
+            sessionStorage.removeItem(ADMIN_EXIT_KEY);
+            return true;
+        }
+    } catch (err) { /* armazenamento indisponível */ }
+    return false;
 }
 
 async function init() {
@@ -2200,18 +2234,24 @@ async function init() {
     const { name } = parseHash();
     if (name && name !== 'login') state.pendingHash = location.hash;
 
+    const adminExited = consumeAdminExitNotice();
+
     if (Api.getToken()) {
         try {
             const { user } = await Api.get('/auth/me');
-            startSession(user);
-            return;
-        } catch (err) {
-            Api.clearToken();
-        }
+            if (user.role !== 'admin') {
+                startSession(user);
+                return;
+            }
+            // Sessão de admin guardada por uma versão anterior: não reaproveita
+            await Api.post('/auth/logout').catch(() => {});
+        } catch (err) { /* sessão inválida */ }
+        Api.clearToken();
     }
 
     history.replaceState(null, '', '#/login');
     showScreen('login');
+    if (adminExited) showToast(ADMIN_EXIT_MESSAGE, 'info', { duration: 6000 });
 }
 
 init();
