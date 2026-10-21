@@ -4,11 +4,11 @@ Sistema para clínicas-escola de Fisioterapia: o **estudante** atende os pacient
 
 ## Como usar
 
-### 1. Online (GitHub Pages) — modo demonstração
+### 1. Online (GitHub Pages)
 
 Acesse **https://soraln.github.io/A3-Usabilidade-Fisioterapia/**.
 
-Sem servidor, o sistema roda inteiro no navegador e guarda os dados no `localStorage`. Tudo funciona (login, cadastros, evoluções, validação), mas os dados ficam **só naquele navegador**. O link "Restaurar dados iniciais", no rodapé, volta tudo ao estado original.
+Sem servidor, o sistema roda inteiro no navegador e guarda os dados no `localStorage`. Tudo funciona (login, cadastros, evoluções, validação), mas os dados ficam **só naquele navegador**. Para voltar aos dados iniciais, limpe os dados do site no navegador.
 
 > Para ver aluno e professor ao mesmo tempo, abra duas abas do mesmo navegador. Entre como aluno **desmarcando** "Lembrar matrícula e manter conectado"; na outra aba, entre como professor. Uma aba atualiza sozinha quando a outra altera algo.
 
@@ -29,7 +29,7 @@ Para usar o site do GitHub Pages com um backend hospedado (Render, Railway, VPS.
 <script>window.PHYSIOEDU_API_URL = 'https://minha-api.exemplo.com/';</script>
 ```
 
-## Contas de demonstração
+## Contas cadastradas
 
 | Perfil     | Matrícula   | Senha  |
 |------------|-------------|--------|
@@ -60,7 +60,7 @@ Também é possível criar uma conta pela tela de login ("Criar conta") e redefi
 ```
 index.html                 Interface (a mesma página no GitHub Pages e no servidor)
 assets/js/shared.js        Regras compartilhadas: validações, CPF, datas, dados iniciais
-assets/js/local-backend.js "Servidor" do navegador, usado quando não há backend (modo demonstração)
+assets/js/local-backend.js "Servidor" do navegador, usado quando não há backend (GitHub Pages)
 assets/js/api.js           Cliente da API: detecta o modo e envia as requisições
 assets/js/app.js           Lógica das telas
 server.js                  Servidor Express (API + arquivos da página)

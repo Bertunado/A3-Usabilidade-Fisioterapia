@@ -477,13 +477,6 @@ function selectRole(role) {
     hideLoginError();
 }
 
-function fillDemo(role) {
-    selectRole(role);
-    $('login-id').value = role === 'student' ? '202301982' : 'DOC-88392';
-    $('login-password').value = '123456';
-    $('login-submit').focus();
-}
-
 function showLoginError(message) {
     const box = $('login-error');
     box.innerHTML = `<i class="fa-solid fa-circle-exclamation mt-0.5"></i><span>${esc(message)}</span>`;
@@ -1888,40 +1881,6 @@ function renderTeacherDashboard() {
 }
 
 
-// ================= MODO DE DADOS (SERVIDOR x LOCAL) =================
-
-function renderModeIndicator(mode) {
-    const el = $('mode-indicator');
-    if (mode === 'server') {
-        el.innerHTML = '<i class="fa-solid fa-server mr-1"></i> Conectado ao servidor PhysioEdu (banco SQLite).';
-    } else {
-        el.innerHTML = `<i class="fa-solid fa-laptop mr-1"></i> Modo demonstração: os dados ficam salvos neste navegador.
-            <button onclick="resetDemoData()" class="underline hover:text-slate-600">Restaurar dados iniciais</button>`;
-    }
-}
-
-async function resetDemoData() {
-    const ok = await confirmDialog({
-        title: 'Restaurar dados iniciais?',
-        message: 'Todos os pacientes, agendamentos, evoluções e contas criadas neste navegador serão apagados e substituídos pelos dados de demonstração.',
-        confirmText: 'Restaurar dados',
-        tone: 'danger',
-        icon: 'fa-rotate-left'
-    });
-    if (!ok) return;
-
-    await LocalBackend.reset();
-    try {
-        Object.keys(localStorage)
-            .filter(k => k.startsWith('physioedu_draft_') || k.startsWith('physioedu_active_'))
-            .forEach(k => localStorage.removeItem(k));
-    } catch (err) { /* armazenamento indisponível */ }
-
-    state.user = null;
-    endSession('Dados de demonstração restaurados. Faça login novamente.', 'success');
-}
-
-
 // ================= INICIALIZAÇÃO =================
 
 function bindGlobalEvents() {
@@ -1973,8 +1932,7 @@ async function init() {
         if (state.user) endSession('Sua sessão expirou. Entre novamente.', 'warning');
     };
 
-    const mode = await Api.detectMode();
-    renderModeIndicator(mode);
+    await Api.detectMode();
     applyRememberedLogin();
 
     // Ao recarregar a página, volta para a mesma tela após validar a sessão

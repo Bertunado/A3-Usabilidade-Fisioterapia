@@ -589,13 +589,5 @@
     return result;
   }
 
-  async function reset() {
-    db = null;
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch (err) { /* ignore */ }
-    await seed();
-  }
-
-  window.LocalBackend = { handle, reset, STORAGE_KEY, HttpError };
+  window.LocalBackend = { handle, STORAGE_KEY, HttpError };
 })();
