@@ -1,4 +1,4 @@
-# PhysioEdu — Gestão de Estágio & Prontuário Eletrônico
+# PhysioEdu - Gestão de Estágio & Prontuário Eletrônico
 
 Sistema para clínicas-escola de Fisioterapia: o **estudante** atende os pacientes da agenda e registra a evolução no formato SOAP; o **professor orientador** revisa, aprova ou pede correção; o **administrador** cadastra estudantes e professores e controla o acesso.
 
